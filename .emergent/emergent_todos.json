@@ -1,0 +1,54 @@
+[
+  {
+    "content": "Backend: extend `routers/admin.py` business-rules CRUD to support all 4 new rule types",
+    "status": "completed"
+  },
+  {
+    "content": "Backend: create `services/business_rules_service.py` with version, overlap, duplicate, timeline",
+    "status": "completed"
+  },
+  {
+    "content": "Backend: add `GET /api/admin/business-rules/timeline` endpoint with overlap flags",
+    "status": "completed"
+  },
+  {
+    "content": "Backend: extend seed-defaults to seed baseline policies for all 4 rule types",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: create shared components — ScopePicker, RuleListLayout, RuleHistoryPanel — with URL-query persistence",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: extend AdminPortal SUB_ROUTES + add /admin/configuration/* routing with subnav",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: build SalesSchemaEditor (Sheet)",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: build PettyCashPolicyEditor (Dialog)",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: build ServiceChargePolicyEditor (Dialog)",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: build IncentiveSchemeEditor (Sheet)",
+    "status": "completed"
+  },
+  {
+    "content": "Frontend: build EffectiveDatingTimeline page",
+    "status": "completed"
+  },
+  {
+    "content": "Backend: wire HR `calculate_service_charge` to load defaults from `service_charge_policy` (verified working)",
+    "status": "completed"
+  },
+  {
+    "content": "Call testing_agent for backend + frontend smoke",
+    "status": "in_progress"
+  }
+]

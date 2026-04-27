@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Settings as SettingsIcon, Users as UsersIcon, Shield, Database,
-          ScrollText, Hash, FileText, GitBranch } from "lucide-react";
+          ScrollText, Hash, FileText, GitBranch, Settings2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { useAuth } from "@/lib/auth";
@@ -14,12 +14,19 @@ import MasterData from "./MasterData";
 import AuditLog from "./AuditLog";
 import NumberSeries from "./NumberSeries";
 import ApprovalWorkflows from "./ApprovalWorkflows";
+import ConfigurationLayout from "./configuration/ConfigurationLayout";
+import SalesSchemasPage from "./configuration/SalesSchemasPage";
+import PettyCashPoliciesPage from "./configuration/PettyCashPoliciesPage";
+import ServiceChargePoliciesPage from "./configuration/ServiceChargePoliciesPage";
+import IncentiveSchemesPage from "./configuration/IncentiveSchemesPage";
+import EffectiveDatingTimelinePage from "./configuration/EffectiveDatingTimelinePage";
 
 const SUB_ROUTES = [
   { path: "",                 label: "Overview",       icon: SettingsIcon, exact: true },
   { path: "users",            label: "Users",          icon: UsersIcon },
   { path: "roles",            label: "Roles",          icon: Shield },
   { path: "master",           label: "Master Data",    icon: Database, prefix: true },
+  { path: "configuration",    label: "Konfigurasi",    icon: Settings2, prefix: true },
   { path: "workflows",        label: "Workflows",      icon: GitBranch },
   { path: "number-series",    label: "Number Series",  icon: Hash },
   { path: "audit-log",        label: "Audit Log",      icon: ScrollText },
@@ -51,6 +58,14 @@ export default function AdminPortal() {
         <Route path="roles" element={<Roles />} />
         <Route path="master" element={<Navigate to="/admin/master/items" replace />} />
         <Route path="master/:entity" element={<MasterData />} />
+        <Route path="configuration" element={<ConfigurationLayout />}>
+          <Route index element={<Navigate to="/admin/configuration/sales-schemas" replace />} />
+          <Route path="sales-schemas" element={<SalesSchemasPage />} />
+          <Route path="petty-cash-policies" element={<PettyCashPoliciesPage />} />
+          <Route path="service-charge-policies" element={<ServiceChargePoliciesPage />} />
+          <Route path="incentive-schemes" element={<IncentiveSchemesPage />} />
+          <Route path="effective-dating" element={<EffectiveDatingTimelinePage />} />
+        </Route>
         <Route path="workflows" element={<ApprovalWorkflows />} />
         <Route path="number-series" element={<NumberSeries />} />
         <Route path="audit-log" element={<AuditLog />} />

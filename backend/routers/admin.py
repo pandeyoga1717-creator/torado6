@@ -12,7 +12,7 @@ from core.exceptions import ConflictError, NotFoundError, ValidationError, ok_en
 from core.perms_catalog import PERMISSIONS_CATALOG
 from core.security import current_user, hash_password, require_perm
 from repositories.base import Repo
-from services import approval_service
+from services import approval_service, business_rules_service
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -293,58 +293,218 @@ async def list_audit_log(
     return ok_envelope([serialize(d) for d in items], {"page": page, "per_page": per_page, "total": total})
 
 
-# ---------- BUSINESS RULES — APPROVAL WORKFLOWS ----------
+# ---------- BUSINESS RULES — APPROVAL WORKFLOWS + SELF-SERVICE CONFIG ----------
+def _rule_perm(rule_type: Optional[str]) -> str:
+    """approval_workflow continues using `admin.workflow.manage`.
+    All other rule types use `admin.business_rules.manage`.
+    """
+    return "admin.workflow.manage" if (rule_type == "approval_workflow") else "admin.business_rules.manage"
+
+
 @router.get("/business-rules")
 async def list_business_rules(
     rule_type: Optional[str] = "approval_workflow",
     entity_type: Optional[str] = None,
-    user: dict = Depends(require_perm("admin.workflow.manage")),
+    scope_type: Optional[str] = None,
+    scope_id: Optional[str] = None,
+    active: Optional[bool] = None,
+    effective_on: Optional[str] = None,
+    user: dict = Depends(current_user),
 ):
+    # permission gating per rule_type (single endpoint, dual-perm dispatch)
+    perms = await _user_perms(user)
+    needed = _rule_perm(rule_type)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+
     db = get_db()
     q: dict = {"deleted_at": None}
     if rule_type:
         q["rule_type"] = rule_type
     if entity_type:
         q["rule_data.entity_type"] = entity_type
-    items = await db.business_rules.find(q).sort([("rule_data.entity_type", 1), ("active", -1), ("version", -1)]).to_list(500)
-    return ok_envelope([serialize(d) for d in items])
+    if scope_type:
+        q["scope_type"] = scope_type
+    if scope_id:
+        q["scope_id"] = scope_id
+    if active is not None:
+        q["active"] = bool(active)
+    items = await db.business_rules.find(q).sort(
+        [("scope_type", 1), ("scope_id", 1), ("rule_type", 1), ("active", -1), ("version", -1)]
+    ).to_list(500)
+    out = [serialize(d) for d in items]
+    if effective_on:
+        out = [
+            r
+            for r in out
+            if (not r.get("effective_from") or r["effective_from"] <= effective_on)
+            and (not r.get("effective_to") or r["effective_to"] >= effective_on)
+        ]
+    return ok_envelope(out)
+
+
+@router.get("/business-rules/timeline")
+async def business_rules_timeline(
+    rule_type: Optional[str] = None,
+    scope_type: Optional[str] = None,
+    scope_id: Optional[str] = None,
+    user: dict = Depends(current_user),
+):
+    """Return all versions for selected scope/rule_type with overlap flags.
+    Mostly used by the configuration timeline page (non-approval rule types).
+    """
+    perms = await _user_perms(user)
+    needed = _rule_perm(rule_type)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+    rows = await business_rules_service.get_timeline(
+        rule_type=rule_type, scope_type=scope_type, scope_id=scope_id
+    )
+    return ok_envelope(rows)
 
 
 @router.get("/business-rules/{rule_id}")
-async def get_business_rule(rule_id: str, user: dict = Depends(require_perm("admin.workflow.manage"))):
+async def get_business_rule(rule_id: str, user: dict = Depends(current_user)):
     db = get_db()
     doc = await db.business_rules.find_one({"id": rule_id, "deleted_at": None})
     if not doc:
         raise NotFoundError("Rule")
+    perms = await _user_perms(user)
+    needed = _rule_perm(doc.get("rule_type"))
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
     return ok_envelope(serialize(doc))
 
 
 @router.post("/business-rules")
 async def create_business_rule(payload: dict = Body(...),
-                                user: dict = Depends(require_perm("admin.workflow.manage"))):
+                                user: dict = Depends(current_user)):
     rt = payload.get("rule_type", "approval_workflow")
-    if rt != "approval_workflow":
-        raise ValidationError("Hanya rule_type='approval_workflow' yang didukung saat ini")
-    return ok_envelope(await approval_service.create_workflow(payload, user=user))
+    perms = await _user_perms(user)
+    needed = _rule_perm(rt)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+
+    if rt == "approval_workflow":
+        return ok_envelope(await approval_service.create_workflow(payload, user=user))
+    return ok_envelope(await business_rules_service.create_rule(payload, user=user))
 
 
 @router.patch("/business-rules/{rule_id}")
 async def update_business_rule(rule_id: str, payload: dict = Body(...),
-                                user: dict = Depends(require_perm("admin.workflow.manage"))):
-    return ok_envelope(await approval_service.update_workflow(rule_id, payload, user=user))
+                                user: dict = Depends(current_user)):
+    db = get_db()
+    existing = await db.business_rules.find_one({"id": rule_id, "deleted_at": None})
+    if not existing:
+        raise NotFoundError("Rule")
+    rt = existing.get("rule_type")
+    perms = await _user_perms(user)
+    needed = _rule_perm(rt)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+
+    if rt == "approval_workflow":
+        return ok_envelope(await approval_service.update_workflow(rule_id, payload, user=user))
+    return ok_envelope(await business_rules_service.update_rule(rule_id, payload, user=user))
+
+
+@router.post("/business-rules/{rule_id}/duplicate")
+async def duplicate_business_rule(rule_id: str, payload: dict = Body(default={}),
+                                   user: dict = Depends(current_user)):
+    db = get_db()
+    existing = await db.business_rules.find_one({"id": rule_id, "deleted_at": None})
+    if not existing:
+        raise NotFoundError("Rule")
+    rt = existing.get("rule_type")
+    perms = await _user_perms(user)
+    needed = _rule_perm(rt)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+    if rt == "approval_workflow":
+        raise ValidationError("Duplicate workflow saat ini didukung lewat halaman Workflow")
+    return ok_envelope(await business_rules_service.duplicate_rule(rule_id, payload, user=user))
+
+
+@router.post("/business-rules/{rule_id}/archive")
+async def archive_business_rule(rule_id: str, user: dict = Depends(current_user)):
+    db = get_db()
+    existing = await db.business_rules.find_one({"id": rule_id, "deleted_at": None})
+    if not existing:
+        raise NotFoundError("Rule")
+    rt = existing.get("rule_type")
+    perms = await _user_perms(user)
+    needed = _rule_perm(rt)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+    if rt == "approval_workflow":
+        # delegate to approval_service update path
+        return ok_envelope(await approval_service.update_workflow(rule_id, {"active": False}, user=user))
+    return ok_envelope(await business_rules_service.archive_rule(rule_id, user=user))
+
+
+@router.post("/business-rules/{rule_id}/activate")
+async def activate_business_rule(rule_id: str, user: dict = Depends(current_user)):
+    db = get_db()
+    existing = await db.business_rules.find_one({"id": rule_id, "deleted_at": None})
+    if not existing:
+        raise NotFoundError("Rule")
+    rt = existing.get("rule_type")
+    perms = await _user_perms(user)
+    needed = _rule_perm(rt)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+    if rt == "approval_workflow":
+        return ok_envelope(await approval_service.update_workflow(rule_id, {"active": True}, user=user))
+    return ok_envelope(await business_rules_service.activate_rule(rule_id, user=user))
 
 
 @router.delete("/business-rules/{rule_id}")
-async def delete_business_rule(rule_id: str, user: dict = Depends(require_perm("admin.workflow.manage"))):
-    await approval_service.delete_workflow(rule_id, user=user)
+async def delete_business_rule(rule_id: str, user: dict = Depends(current_user)):
+    db = get_db()
+    existing = await db.business_rules.find_one({"id": rule_id, "deleted_at": None})
+    if not existing:
+        raise NotFoundError("Rule")
+    rt = existing.get("rule_type")
+    perms = await _user_perms(user)
+    needed = _rule_perm(rt)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+    if rt == "approval_workflow":
+        await approval_service.delete_workflow(rule_id, user=user)
+    else:
+        await business_rules_service.delete_rule(rule_id, user=user)
     return ok_envelope({"message": "Rule deleted"})
 
 
 @router.post("/business-rules/seed-defaults")
 async def seed_default_workflows(payload: dict = Body(default={}),
-                                  user: dict = Depends(require_perm("admin.workflow.manage"))):
-    n = await approval_service.seed_defaults(user_id=user["id"], overwrite=bool(payload.get("overwrite", False)))
-    return ok_envelope({"inserted": n})
+                                  user: dict = Depends(current_user)):
+    """Seed defaults. By default (no `rule_type` in payload), seeds approval_workflow.
+    Pass {"rule_type": "config"} to seed the 4 self-service config rule types.
+    """
+    rt = payload.get("rule_type") or "approval_workflow"
+    perms = await _user_perms(user)
+    needed = _rule_perm(rt if rt == "approval_workflow" else None)
+    if "*" not in perms and needed not in perms:
+        from core.exceptions import ForbiddenError
+        raise ForbiddenError(f"Missing permission: {needed}")
+
+    if rt == "approval_workflow":
+        n = await approval_service.seed_defaults(user_id=user["id"], overwrite=bool(payload.get("overwrite", False)))
+        return ok_envelope({"inserted": n, "kind": "approval_workflow"})
+    if rt == "config":
+        n = await business_rules_service.seed_defaults(user=user, overwrite=bool(payload.get("overwrite", False)))
+        return ok_envelope({"inserted": n, "kind": "config"})
+    raise ValidationError(f"rule_type tidak didukung untuk seed-defaults: {rt}")
 
 
 @router.get("/approval-entity-types")
@@ -356,3 +516,18 @@ async def approval_entity_types(user: dict = Depends(require_perm("admin.workflo
         {"value": "payment_request",   "label": "Payment Request (PAY)"},
         {"value": "employee_advance",  "label": "Employee Advance (EA)"},
     ])
+
+
+@router.get("/configuration/rule-types")
+async def list_config_rule_types(user: dict = Depends(require_perm("admin.business_rules.manage"))):
+    """List of self-service configuration rule types managed via /admin/configuration/* UI."""
+    return ok_envelope([
+        {"value": rt, "label": label}
+        for rt, label in business_rules_service.RULE_TYPE_LABELS.items()
+    ])
+
+
+# Helper used by perm dispatch ABOVE — defined late to access app context
+async def _user_perms(user: dict) -> set[str]:
+    from core.security import get_user_permissions
+    return await get_user_permissions(user)

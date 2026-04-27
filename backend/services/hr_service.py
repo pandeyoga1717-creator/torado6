@@ -336,9 +336,13 @@ async def get_service_charge(sc_id: str) -> dict:
 async def calculate_service_charge(payload: dict, *, user: dict) -> dict:
     """Calculate service charge for period/outlet:
     - Sum service_charge from validated daily_sales for outlet+period
-    - Deduct LB% and LD%
-    - Distribute remainder by employee days_worked
+    - Deduct LB% and LD% (defaults from `service_charge_policy` business rule
+      resolved via outlet → brand → group hierarchy if not explicitly provided)
+    - Distribute remainder by employee days_worked (default working-days from
+      policy if not overridden in payload)
     """
+    from services import business_rules_service  # local import to avoid cycle
+
     db = get_db()
     period = payload.get("period") or _period_now()
     outlet_id = payload.get("outlet_id")
@@ -347,8 +351,24 @@ async def calculate_service_charge(payload: dict, *, user: dict) -> dict:
     outlet = await db.outlets.find_one({"id": outlet_id, "deleted_at": None})
     if not outlet:
         raise ValidationError("Outlet tidak ditemukan")
-    lb_pct = float(payload.get("lb_pct", 0.05) or 0)
-    ld_pct = float(payload.get("ld_pct", 0) or 0)
+
+    # Resolve service_charge_policy if user did not override
+    policy = await business_rules_service.resolve_rule(
+        rule_type="service_charge_policy",
+        outlet_id=outlet_id,
+        brand_id=outlet.get("brand_id"),
+        on_date=f"{period}-01",
+    )
+    policy_data = (policy or {}).get("rule_data") or {}
+
+    lb_pct = float(
+        payload.get("lb_pct") if payload.get("lb_pct") is not None else policy_data.get("lb_pct", 0.05)
+    )
+    ld_pct = float(
+        payload.get("ld_pct") if payload.get("ld_pct") is not None else policy_data.get("ld_pct", 0)
+    )
+    default_days = int(payload.get("default_working_days") or policy_data.get("default_working_days") or 22)
+
     if lb_pct < 0 or lb_pct > 0.5:
         raise ValidationError("lb_pct di luar batas (0..0.5)")
     if ld_pct < 0 or ld_pct > 0.5:
@@ -376,22 +396,22 @@ async def calculate_service_charge(payload: dict, *, user: dict) -> dict:
         employees.append(e)
 
     # Days worked override
-    days_overrides = {a["employee_id"]: float(a.get("days_worked", 22))
+    days_overrides = {a["employee_id"]: float(a.get("days_worked", default_days))
                       for a in payload.get("allocations", []) if a.get("employee_id")}
-    total_days = sum(days_overrides.get(e["id"], 22) for e in employees)
+    total_days = sum(days_overrides.get(e["id"], default_days) for e in employees)
     allocations: list[dict] = []
     if total_days <= 0 or distributable <= 0 or not employees:
         for e in employees:
             allocations.append({
                 "employee_id": e["id"],
                 "employee_name": e.get("full_name"),
-                "days_worked": days_overrides.get(e["id"], 22),
+                "days_worked": days_overrides.get(e["id"], default_days),
                 "share_pct": 0,
                 "amount": 0,
             })
     else:
         for e in employees:
-            d_w = days_overrides.get(e["id"], 22)
+            d_w = days_overrides.get(e["id"], default_days)
             share = d_w / total_days
             amount = round(distributable * share, 2)
             allocations.append({
@@ -418,6 +438,10 @@ async def calculate_service_charge(payload: dict, *, user: dict) -> dict:
         "calculated_at": _now(), "calculated_by": user["id"],
         "updated_at": _now(),
         "notes": payload.get("notes"),
+        "policy_id": (policy or {}).get("id"),
+        "policy_version": (policy or {}).get("version"),
+        "policy_scope": ((policy or {}).get("scope_type"), (policy or {}).get("scope_id"))
+            if policy else None,
     }
     if existing:
         if existing["status"] == "posted":
