@@ -1,0 +1,71 @@
+{
+  "summary": "Phase 7C+ ForecastGuard: 11/11 backend pytest pass (100%). Frontend Manual Journal Form integration verified end-to-end: severe-banner with reason flow, none-banner hidden flow, and outlet-scoped severe scenario all working. Math correctness, severity classification, validation (400s), auth gate (401), and future-period forecast all verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "FinancePortal navbar (any /finance/* page)", "issues": ["React hydration console error: '<span> cannot be a child of <option>' — unrelated to forecast guard but fires on every render of the COA select. Likely the COA <option> contains a styled span. Pre-existing, NOT introduced by this iteration."]}
+    ]
+  },
+  "passed_tests_backend": [
+    "POST /api/forecasting/guard/check no-token -> 401/403",
+    "amount=-100 -> 400",
+    "kind='asset' -> 400",
+    "period='April 2026' -> 400",
+    "amount=100000, kind=expense -> severity='none' (well within forecast)",
+    "amount=200000000 consolidated -> severity in {mild, severe} (was 'severe' +35% above 438M forecast)",
+    "Math: projected == mtd_amount + amount (verified)",
+    "Math: deviation_pct == (projected - forecast)/forecast * 100 (verified within 0.05)",
+    "period='2026-05' (future) -> forecast_value > 0, mtd_amount == 0",
+    "Required keys present: severity, deviation_pct, mtd_amount, projected, forecast_value, ci_band, message, period",
+    "REGRESSION: GET /api/forecasting/sales 200 with monthly_history+monthly_forecast",
+    "REGRESSION: GET /api/forecasting/methods 200",
+    "REGRESSION: GET /api/reports/pivot 200/400/422"
+  ],
+  "passed_tests_frontend": [
+    "Login admin@torado.id/Torado@2026 -> /admin OK",
+    "/finance/manual-journal renders without page errors",
+    "Save button data-testid='mje-save' present, default label 'Post JE'",
+    "Scenario A (small expense 100k consolidated): banner hidden (no severe/mild/none banner), reason TA hidden, save label 'Post JE', save enabled with balanced lines",
+    "Scenario B (severe consolidated 200M): banner visible with data-testid='forecast-guard-severe', red styling, label 'Far Above Forecast (+35.06%)', shows MTD Rp 392.772.000 / Proposed Rp 200.000.000 / Projected Rp 592.772.000 / Forecast Rp 438.896.453 ±Rp 8.699.828",
+    "Scenario B: reason textarea data-testid='mje-guard-reason' shown, save disabled",
+    "Scenario B: save label changes to 'Post (with reason)' on severe",
+    "Scenario B: typing reason -> save becomes enabled",
+    "Scenario C (outlet-scoped Altero 60M expense): banner severity='severe' (+64.94%), shows scope 'Altero — Expense Dr Rp 60.000.000 (5102)', MTD Rp 71.229.000 + Proposed Rp 60.000.000 = Projected Rp 131.229.000 vs Forecast Rp 79.561.923",
+    "Banner reflects period from entry_date.slice(0,7) (period 2026-04 shown)",
+    "Debounce ~600ms working — no API hammering during typing"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase7c_forecast_guard.py",
+    "/app/test_reports/pytest/phase7c_guard_results.xml"
+  ],
+  "action_items": [
+    "LOW (pre-existing, NOT introduced by this iteration): Fix React hydration warning '<span> cannot be a child of <option>' in COA select option rendering. Search for an <option> containing a <span>; replace with plain text or restructure. This is unrelated to forecast guard and was already present in earlier portals."
+  ],
+  "critical_code_review_comments": [
+    "forecast_guard_service._classify(): the severe threshold uses 'projected > (forecast+band)*1.20' which means when ci_band is large, severity stays mild even for big deviations. Spec says 'severe = >20% above forecast+CI band'. Current behaviour matches spec but the multiplicative compound (band * 1.20) is slightly more permissive than strict additive '>20% above (forecast+band)'. Acceptable per current spec.",
+    "forecast_guard_service.check_expense() calls forecasting_service.forecast_series() which is ~500ms per call. With 600ms frontend debounce this is fine, but a 30s rate-limit cache layer would help when a user enters multiple Dr lines for the same outlet/brand scope. Not blocking.",
+    "ManualJournalForm.jsx line 281: only the FIRST guardScope's verdict drives needsReason via onChange — if a 2nd scope is severe but 1st is none, save would not require reason. Consider aggregating verdicts across all guardScopes (max severity wins). Edge case but worth flagging.",
+    "ManualJournalForm.jsx: guardScopes useMemo recomputes whenever form.lines OR coas changes — efficient. No issues.",
+    "ForecastGuardBanner.jsx: cancellation via lastReqRef.current handles stale responses correctly. Good.",
+    "Backend kind='revenue' code path exists in service but no router/UI usage yet — dead code for this iteration but harmless.",
+    "Pre-existing console warning '<span> cannot be a child of <option>' fires on every COA select render — should be cleaned up but is NOT introduced by Phase 7C+."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase7c_forecast_guard.py (new — 11 tests covering /api/forecasting/guard/check + light Phase 7C regression)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11)",
+    "frontend": "100% (severe / none / outlet-scoped severe flows all working; only an unrelated pre-existing console warning)"
+  },
+  "test_credentials": "admin@torado.id / Torado@2026 (Super Admin) — verified.",
+  "seed_data_creation": "None. Used existing seed_phase7b_demo (240 daily_sales validated, 480 JE). MTD-April expense ~Rp 392.7M consolidated, ~Rp 71.2M Altero — matches agent-to-agent context note.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Forecast Guard is fully functional E2E. Backend 11/11 green; frontend severe/mild/none + outlet-scoped + reason-gated save all verified. Live values from /api/forecasting/guard/check on admin token: consolidated 200M expense -> severe +35.06% (MTD 392.772.000, forecast 438.896.453, ci 8.699.828); Altero 60M expense -> severe +64.94% (MTD 71.229.000, forecast 79.561.923). The only outstanding console warning ('<span> child of <option>') is unrelated, pre-existing across the FinancePortal pages.",
+  "rca_of_issue": "N/A — no bugs found in the new feature. The unrelated console warning RCA: a custom <option> in some <select> contains a <span> wrapper (likely for icon/styling) which violates HTML spec. Search '<span' inside any <option> across the codebase; replace with plain text or use option label attribute."
+}

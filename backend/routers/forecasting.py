@@ -1,17 +1,18 @@
 """/api/forecasting — Phase 7C 3-month sales/expense forecasting.
 
 Endpoints:
-- GET /api/forecasting/methods           — catalog of methods + targets
-- GET /api/forecasting/sales             — sales forecast (per outlet/brand or consolidated)
-- GET /api/forecasting/expense           — expense forecast (per outlet, optional COA filter)
-- GET /api/forecasting/dashboard         — summary across all outlets (executive view)
+- GET  /api/forecasting/methods           — catalog of methods + targets
+- GET  /api/forecasting/sales             — sales forecast (per outlet/brand or consolidated)
+- GET  /api/forecasting/expense           — expense forecast (per outlet, optional COA filter)
+- GET  /api/forecasting/dashboard         — summary across all outlets (executive view)
+- POST /api/forecasting/guard/check       — pre-submit guardrail (forecast vs proposed amount)
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 
 from core.exceptions import ok_envelope
 from core.security import current_user, require_any_perm
-from services import forecasting_service
+from services import forecast_guard_service, forecasting_service
 
 router = APIRouter(prefix="/api/forecasting", tags=["forecasting"])
 
@@ -65,4 +66,31 @@ async def forecast_dashboard(
 ):
     return ok_envelope(await forecasting_service.forecast_dashboard(
         months=months, method=method,
+    ))
+
+
+@router.post("/guard/check")
+async def guard_check(
+    payload: dict = Body(...),
+    user: dict = Depends(current_user),
+):
+    """Pre-submit forecast guard. Lightweight — auth required but no specific perm gate.
+
+    Body:
+      {
+        "amount": float,            # required, ≥0
+        "outlet_id": str,           # optional
+        "brand_id": str,            # optional
+        "kind": "expense"|"revenue",# default "expense"
+        "period": "YYYY-MM",        # default current month
+        "method": "hybrid"          # forecast method
+      }
+    """
+    return ok_envelope(await forecast_guard_service.check_expense(
+        amount=payload.get("amount", 0),
+        outlet_id=payload.get("outlet_id"),
+        brand_id=payload.get("brand_id"),
+        kind=payload.get("kind", "expense"),
+        period=payload.get("period"),
+        method=payload.get("method", "hybrid"),
     ))

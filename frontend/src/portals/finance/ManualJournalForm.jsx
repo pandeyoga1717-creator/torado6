@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import ForecastGuardBanner from "@/components/shared/ForecastGuardBanner";
 import { fmtRp, todayJakartaISO } from "@/lib/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,8 @@ export default function ManualJournalForm() {
   const [outlets, setOutlets] = useState([]);
   const [brands, setBrands] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [guardVerdict, setGuardVerdict] = useState(null);
+  const [confirmReason, setConfirmReason] = useState("");
   const [form, setForm] = useState({
     entry_date: todayJakartaISO(),
     description: "",
@@ -61,6 +64,38 @@ export default function ManualJournalForm() {
     return { dr, cr, balanced: Math.abs(dr - cr) < 0.5 && dr > 0 };
   }, [form.lines]);
 
+  // Aggregate Dr lines on expense/cogs COA per outlet for forecast guard
+  const guardScopes = useMemo(() => {
+    const map = new Map();
+    form.lines.forEach(l => {
+      const dr = Number(l.dr || 0);
+      if (dr <= 0) return;
+      if (!l.coa_id) return;
+      const coa = coas.find(c => c.id === l.coa_id);
+      if (!coa) return;
+      if (!["expense", "cogs"].includes(coa.type)) return;
+      const key = `${l.dim_outlet || "_"}|${l.dim_brand || "_"}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          outletId: l.dim_outlet || null,
+          brandId: l.dim_brand || null,
+          amount: 0,
+          coaCodes: new Set(),
+        });
+      }
+      const e = map.get(key);
+      e.amount += dr;
+      e.coaCodes.add(coa.code);
+    });
+    return Array.from(map.values()).map(e => ({
+      ...e, coaCodes: Array.from(e.coaCodes),
+    }));
+  }, [form.lines, coas]);
+
+  const hasSevereGuard = guardVerdict?.severity === "severe";
+  const hasMildGuard = guardVerdict?.severity === "mild";
+  const needsReason = hasSevereGuard || hasMildGuard;
+
   async function save() {
     if (!form.entry_date) { toast.error("Tanggal wajib"); return; }
     if (!form.description.trim()) { toast.error("Deskripsi wajib"); return; }
@@ -69,11 +104,18 @@ export default function ManualJournalForm() {
     if (form.lines.some(l => Number(l.dr || 0) > 0 && Number(l.cr || 0) > 0)) {
       toast.error("Satu line hanya boleh berisi Dr ATAU Cr, tidak keduanya"); return;
     }
+    if (needsReason && !confirmReason.trim()) {
+      toast.error("Pengeluaran melewati forecast — wajib isi alasan/justifikasi");
+      return;
+    }
     setSaving(true);
     try {
+      const finalDesc = needsReason && confirmReason.trim()
+        ? `${form.description.trim()} | Forecast guard reason: ${confirmReason.trim()}`
+        : form.description.trim();
       const payload = {
         entry_date: form.entry_date,
-        description: form.description.trim(),
+        description: finalDesc,
         lines: form.lines.map(l => ({
           coa_id: l.coa_id,
           dr: Number(l.dr || 0),
@@ -100,8 +142,8 @@ export default function ManualJournalForm() {
         </Button>
         <h2 className="text-xl font-bold">Manual Journal Entry</h2>
         <div className="ml-auto">
-          <Button onClick={save} disabled={saving || !totals.balanced} className="rounded-full pill-active gap-2" data-testid="mje-save">
-            <Save className="h-4 w-4" /> {saving ? "…" : "Post JE"}
+          <Button onClick={save} disabled={saving || !totals.balanced || (needsReason && !confirmReason.trim())} className="rounded-full pill-active gap-2" data-testid="mje-save">
+            <Save className="h-4 w-4" /> {saving ? "…" : (hasSevereGuard ? "Post (with reason)" : "Post JE")}
           </Button>
         </div>
       </div>
@@ -216,6 +258,54 @@ export default function ManualJournalForm() {
           </span>
         </div>
       </div>
+
+      {/* Forecast Guard banners — one per (outlet, brand) scope of expense Dr */}
+      {guardScopes.length > 0 && (
+        <div className="space-y-2">
+          {guardScopes.map((s, i) => (
+            <div key={`guard-${i}-${s.outletId || "_"}-${s.brandId || "_"}`}>
+              {(s.outletId || s.brandId) && (
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1 ml-1">
+                  Scope: {s.outletId ? outlets.find(o => o.id === s.outletId)?.name || "Outlet" : ""}
+                  {s.outletId && s.brandId ? " · " : ""}
+                  {s.brandId ? brands.find(b => b.id === s.brandId)?.name || "Brand" : ""}
+                  {" "}— Expense Dr {fmtRp(s.amount)} ({s.coaCodes.join(", ")})
+                </div>
+              )}
+              <ForecastGuardBanner
+                amount={s.amount}
+                outletId={s.outletId}
+                brandId={s.brandId}
+                kind="expense"
+                period={form.entry_date?.slice(0, 7)}
+                onChange={i === 0 ? setGuardVerdict : undefined}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Reason input shown when guard triggered */}
+      {needsReason && (
+        <div className={cn(
+          "glass-card p-4 border-2",
+          hasSevereGuard ? "border-red-500/40" : "border-amber-500/40",
+        )}>
+          <Label className="text-xs uppercase text-muted-foreground font-semibold">
+            Alasan / Justifikasi (wajib karena {hasSevereGuard ? "jauh" : ""} di atas forecast)
+          </Label>
+          <Textarea
+            value={confirmReason}
+            onChange={e => setConfirmReason(e.target.value)}
+            placeholder="mis. One-off renovasi outlet, bayar deposit vendor baru, koreksi periode lalu, dll."
+            className="glass-input mt-1 min-h-[60px]"
+            data-testid="mje-guard-reason"
+          />
+          <div className="text-[11px] text-muted-foreground mt-1.5">
+            Alasan ini akan digabung ke description JE untuk audit trail.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
