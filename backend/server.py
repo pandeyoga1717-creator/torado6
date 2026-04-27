@@ -22,7 +22,7 @@ from core.db import close_db, init_db  # noqa: E402
 from core.exceptions import AuroraException, error_envelope  # noqa: E402
 
 # Routers
-from routers import admin, ai, approvals, auth, executive, finance, hr, inventory, master, notifications, outlet, procurement, reports, search  # noqa: E402
+from routers import admin, ai, approvals, auth, executive, finance, forecasting, hr, inventory, master, notifications, outlet, procurement, reports, search  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -114,6 +114,7 @@ app.include_router(finance.router)
 app.include_router(executive.router)
 app.include_router(hr.router)
 app.include_router(reports.router)
+app.include_router(forecasting.router)
 
 
 @app.get("/api/health")

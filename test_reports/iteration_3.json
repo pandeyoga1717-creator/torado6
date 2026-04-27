@@ -1,0 +1,80 @@
+{
+  "summary": "Phase 7C Forecasting backend: 21/21 pytest pass (100%). All endpoints verified: /methods, /sales (default+linear+ewma+hybrid+per-outlet+months=6), /expense, /dashboard. Math correctness verified (forecast_total == sum forecast_daily). Auth gate, ValidationError->400, FastAPI Query 422 all confirmed. Phase 7B regression light-tested (vendor-scorecard, pivot, comparatives, builder/run, finance/* endpoints) all 200. Frontend /finance/forecasting renders with all required data-testids (KPIs, chart SVG, method+months toggles, target/outlet/history-days controls, method-comparison panel, per-outlet table with 4 outlets, month-bars). Method switching, months switching, and outlet switching all reload data correctly. ONE real frontend bug found: React duplicate key warning ('2026-04') — MonthlyBars uses period as key but the same month appears in both monthly_history (last) and monthly_forecast (first) causing key+testid collision.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Forecasting.jsx > MonthlyBars",
+        "issue": "React duplicate key warning ('Encountered two children with the same key, 2026-04') because both monthly_history[last] and monthly_forecast[0] share the same period (current month). Same collision affects data-testid='month-bar-2026-04'. Fires repeatedly on every render.",
+        "selector": "[data-testid^='month-bar-']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests_backend": [
+    "GET /api/forecasting/methods returns {linear, ewma, hybrid} and {sales, expense}",
+    "GET /api/forecasting/sales (default) returns full payload with all 10 keys + comparison_methods{linear,ewma,hybrid}, method='hybrid'",
+    "GET /api/forecasting/sales?method=linear returns params{a,b,r2}",
+    "GET /api/forecasting/sales?method=ewma returns params{alpha,level}",
+    "GET /api/forecasting/sales?method=hybrid returns params{alpha,weight,linear_a,linear_b,ewma_level,r2}",
+    "GET /api/forecasting/sales?outlet_id=X has history_total <= consolidated history_total",
+    "GET /api/forecasting/sales?months=6 returns monthly_forecast length 6",
+    "GET /api/forecasting/sales?method=bogus returns 400 (ValidationError mapped correctly)",
+    "GET /api/forecasting/sales?months=24 returns 422 (FastAPI Query out-of-range)",
+    "GET /api/forecasting/sales without token returns 401/403",
+    "Math: |sum(forecast_daily.value) - totals.forecast_total| < 1.0 (passes)",
+    "GET /api/forecasting/expense: history_total > 0 (COGS journal postings present)",
+    "GET /api/forecasting/dashboard returns consolidated{} + outlets[4] with growth_pct + accuracy_mape per outlet",
+    "REGRESSION: /api/reports/vendor-scorecard, /api/reports/pivot, /api/reports/comparatives, /api/reports/builder/run all 200",
+    "REGRESSION: /api/finance/profit-loss, /api/finance/trial-balance, /api/finance/ap-aging all 200"
+  ],
+  "passed_tests_frontend": [
+    "Login admin@torado.id/Torado@2026 -> /admin OK",
+    "/finance/forecasting renders without page errors",
+    "Forecasting route registered in FinancePortal.jsx (line 39, 77)",
+    "All 4 KPI cards present with values: History 90d Rp 2.581.214.000, Forecast 3M Rp 5.341.498.987, Growth +106.94%, Backtest Accuracy 41.57% (Volatile)",
+    "SVG chart [data-testid=forecast-chart] renders with history line, dashed forecast line, confidence band, 'today' vertical marker",
+    "Method toggles (linear/ewma/hybrid) present with active state, click triggers reload",
+    "Months toggles (1M/3M/6M) present and functional",
+    "Outlet dropdown options: ['Consolidated (All)','Altero','Calluna','De La Sol','Rucker Park'] - switching to single outlet hides per-outlet table (rows: 4 -> 0)",
+    "Method comparison panel shows all 3 methods (forecast-compare-{linear,ewma,hybrid})",
+    "Per-outlet table renders 4 outlet-row-* in consolidated view",
+    "MonthlyBars renders 7 month-bar-* elements (3M default + 90d history + month boundary)",
+    "forecast-target, forecast-outlet, forecast-history-days controls present"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase7c_forecasting.py",
+    "/app/test_reports/pytest/phase7c_results.xml"
+  ],
+  "action_items": [
+    "MEDIUM: Fix React duplicate key warning in /app/frontend/src/portals/finance/Forecasting.jsx line 463 — change `key={r.period}` and `data-testid` to include r.type prefix, e.g. key={`${r.type}-${r.period}`} and data-testid={`month-bar-${r.type}-${r.period}`}. Same period (current month) appears in both monthly_history and monthly_forecast.",
+    "LOW: MAPE around 41% labeled 'Volatile' — informational only per spec, NOT a bug. Demo data has ramp-up bias from seed."
+  ],
+  "critical_code_review_comments": [
+    "forecasting_service.py: clamp `forecast_vals = [max(0.0, v) for v in forecast_vals]` is applied to displayed daily forecast but `totals.forecast_total = round(sum(forecast_vals), 2)` matches that clamped list — OK.",
+    "forecasting_service.py: `growth_pct = (sum(forecast_vals) - sum(values)) / sum(values) * 100` compares ~93 forecast_days vs 91 history_days — slight horizon mismatch can inflate growth%. Acceptable for MVP analytics, but consider normalizing to per-day or matching window for fairer comparison.",
+    "forecasting_service.py forecast_dashboard: when an outlet forecast errors out, it's silently skipped (`except Exception: continue`) which can mask bugs — consider logging.",
+    "forecasting_service.py: `forecast_days = months * 31` over-shoots short months; the trimming via `monthly_forecast_full[:months]` works but daily forecast list extends ~3 days beyond last reported month. Cosmetic only.",
+    "forecasting.py router: permissions `executive.dashboard.read` OR `finance.report.profit_loss` — Super Admin verified, but non-finance/non-exec users would 403 (acceptable per spec).",
+    "Forecasting.jsx MonthlyBars (line 460-475): uses `r.period` as both React key AND data-testid; collides when current month appears in both history and forecast arrays.",
+    "Forecasting.jsx file is large (487 lines) but cohesive; below 700-line guideline."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase7c_forecasting.py (new — 21 tests covering Phase 7C + light Phase 7B/4-6 regression)"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21)",
+    "frontend": "92% (all required test IDs and flows work; one React duplicate-key console warning)"
+  },
+  "test_credentials": "admin@torado.id / Torado@2026 (Super Admin) verified working.",
+  "seed_data_creation": "None created. Existing seed_phase7b_demo data (240 daily_sales validated, 480 journal entries) used; produced consolidated history Rp 2.58B, forecast 3M Rp 5.34B, hybrid MAPE 41.57%.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 7C is fully functional end-to-end. Backend 21/21 pass. Only outstanding item is a frontend React duplicate-key warning in MonthlyBars when the current month appears in both monthly_history and monthly_forecast (e.g. '2026-04' shows in both). Fix is a 1-line key change in Forecasting.jsx line 463. ValidationError -> 400 mapping (carried fix from iteration_2) is verified working for /api/forecasting/sales?method=bogus.",
+  "rca_of_react_warning": "monthly_history (last 6 months) and monthly_forecast (next 3 months) both include the current calendar month period (e.g. '2026-04') because monthly_history aggregates partial current month from filled history dates ending at today, and forecast_daily starts at today+1 within the same month. MonthlyBars concatenates both arrays and uses {r.period} as React key; React detects collision. Fix: include r.type in key and testid."
+}
