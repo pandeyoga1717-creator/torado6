@@ -332,3 +332,10 @@ Dokumen ini akan di-update setiap fase selesai. Setiap update wajib:
   - **Frontend:** New `/finance/forecasting` page — KPI cards, SVG chart with history/forecast/CI band + 'today' marker, monthly bar chart, method comparison panel, per-outlet table with growth & MAPE badges.
   - **Test results (iteration_3):** Backend 21/21 (100%); frontend 100% after fixing one React duplicate-key warning in MonthlyBars.
   - **Next (Phase 7D):** Real-time anomaly detection (sales deviation, vendor price/lead-time anomalies, AP/Cash spikes) → notification feed.
+
+- **v1.7C+** (Forecast Guard Enhancement — Jan 2026): **Forecast-aware guardrails** wired into expense submission.
+  - **What's Built:** New `forecast_guard_service.check_expense()` — classifies a proposed amount vs forecast (severity: none/mild/severe). New `POST /api/forecasting/guard/check` endpoint. Reusable `<ForecastGuardBanner>` React component with 600ms debounce, severity-colored states, MTD/Proposed/Projected/Forecast stats grid.
+  - **Integration:** Manual Journal Form aggregates expense Dr lines per (outlet, brand) scope → renders one banner per scope; Save button requires justification reason if ANY scope is mild/severe; reason merged into JE description for audit trail.
+  - **UX value:** Converts forecasts from passive analytics into proactive operational nudge — managers see "this expense is 35% above April forecast Rp 438M" before they post, with auditable reason capture.
+  - **Test results (iteration_4):** Backend 11/11 (100%); frontend 100% across severe / mild / none / multi-scope flows.
+  - **Next:** Extend the same `<ForecastGuardBanner>` into Petty Cash submission, Urgent Purchase form, and the My-Approvals queue (read-only verdict display for approvers).

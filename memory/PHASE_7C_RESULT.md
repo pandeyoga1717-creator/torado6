@@ -92,3 +92,35 @@ Per `/app/memory/PHASE_PLAN.md`:
 2. Vendor anomaly detection (price spike, lead time degradation) → procurement alert
 3. AP/Cash anomaly (sudden payment outflow vs forecast) → finance alert
 4. Configurable thresholds per outlet/brand via Admin > System Settings
+
+---
+
+## Post-Phase-7C Enhancement: Forecast Guard (Jan 2026)
+
+**Goal:** Wire forecasts into the approval/submission flow as **proactive guardrails** — pre-submit warnings when an expense materially exceeds forecast.
+
+### Backend (NEW)
+- `services/forecast_guard_service.py` — `check_expense(amount, outlet_id?, brand_id?, kind, period?)`
+  - Severity logic: `none` (within forecast), `mild` (>10% above), `severe` (>20% above forecast+CI band)
+  - For current month: `forecast_value = MTD_actual + remaining_days_forecast` (full-month projection, not partial)
+  - Returns: severity, deviation_pct, mtd_amount, projected, forecast_value, ci_band, message (Bahasa Indonesia)
+- `POST /api/forecasting/guard/check` — auth-only (no special perm); 600ms debounced from client
+
+### Frontend (NEW)
+- `components/shared/ForecastGuardBanner.jsx` — reusable banner with debounced API check, severity-colored (green/amber/red), 4 stats (MTD, Proposed, Projected, Forecast±CI)
+- Integrated into **`ManualJournalForm.jsx`**:
+  - Aggregates expense Dr lines per (outlet, brand) scope → renders one banner per scope
+  - **Multi-scope aggregation**: Save button requires reason if **ANY** scope returns mild/severe (max severity wins)
+  - Stale verdict cleanup when scope changes (e.g., line removed)
+  - Reason input appears below banners when guard triggered
+  - On submit: reason auto-merged into JE description for audit trail (`"Original desc | Forecast guard reason: {reason}"`)
+
+### Test Outcomes (iteration_4.json)
+- **Backend: 11/11 (100%)** — auth gate, validation 400s, severity classification, math correctness, future-period support, regression
+- **Frontend: 100%** — severe/mild/none flows, outlet-scoped severity, multi-scope aggregation, reason gating, debounce
+- 1 pre-existing console warning (`<span> child of <option>` in COA select) — NOT introduced by this iteration; not blocking
+
+### Real Demo Values (admin token, current MTD)
+- Consolidated 200M expense → severe +35.06% (MTD 392.7M, forecast 438.9M, ci ±8.7M)
+- Altero 60M expense → severe +64.94% (MTD 71.2M, forecast 79.6M)
+- Calluna 50M expense → severe +23.88% (MTD 131.2M, forecast 146.3M ± 2.99M)

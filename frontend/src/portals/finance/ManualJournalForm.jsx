@@ -18,7 +18,7 @@ export default function ManualJournalForm() {
   const [outlets, setOutlets] = useState([]);
   const [brands, setBrands] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [guardVerdict, setGuardVerdict] = useState(null);
+  const [verdicts, setVerdicts] = useState({});  // key -> verdict
   const [confirmReason, setConfirmReason] = useState("");
   const [form, setForm] = useState({
     entry_date: todayJakartaISO(),
@@ -92,8 +92,28 @@ export default function ManualJournalForm() {
     }));
   }, [form.lines, coas]);
 
-  const hasSevereGuard = guardVerdict?.severity === "severe";
-  const hasMildGuard = guardVerdict?.severity === "mild";
+  // Prune stale verdicts when a scope is removed (e.g., outlet changed/line removed)
+  useEffect(() => {
+    const validKeys = new Set(
+      guardScopes.map(s => `${s.outletId || "_"}|${s.brandId || "_"}`),
+    );
+    setVerdicts(prev => {
+      const next = {};
+      let changed = false;
+      Object.entries(prev).forEach(([k, v]) => {
+        if (validKeys.has(k)) next[k] = v;
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [guardScopes]);
+
+  const hasSevereGuard = useMemo(
+    () => Object.values(verdicts).some(v => v?.severity === "severe"), [verdicts],
+  );
+  const hasMildGuard = useMemo(
+    () => Object.values(verdicts).some(v => v?.severity === "mild"), [verdicts],
+  );
   const needsReason = hasSevereGuard || hasMildGuard;
 
   async function save() {
@@ -262,26 +282,29 @@ export default function ManualJournalForm() {
       {/* Forecast Guard banners — one per (outlet, brand) scope of expense Dr */}
       {guardScopes.length > 0 && (
         <div className="space-y-2">
-          {guardScopes.map((s, i) => (
-            <div key={`guard-${i}-${s.outletId || "_"}-${s.brandId || "_"}`}>
-              {(s.outletId || s.brandId) && (
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1 ml-1">
-                  Scope: {s.outletId ? outlets.find(o => o.id === s.outletId)?.name || "Outlet" : ""}
-                  {s.outletId && s.brandId ? " · " : ""}
-                  {s.brandId ? brands.find(b => b.id === s.brandId)?.name || "Brand" : ""}
-                  {" "}— Expense Dr {fmtRp(s.amount)} ({s.coaCodes.join(", ")})
-                </div>
-              )}
-              <ForecastGuardBanner
-                amount={s.amount}
-                outletId={s.outletId}
-                brandId={s.brandId}
-                kind="expense"
-                period={form.entry_date?.slice(0, 7)}
-                onChange={i === 0 ? setGuardVerdict : undefined}
-              />
-            </div>
-          ))}
+          {guardScopes.map((s, i) => {
+            const key = `${s.outletId || "_"}|${s.brandId || "_"}`;
+            return (
+              <div key={`guard-${key}`}>
+                {(s.outletId || s.brandId) && (
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1 ml-1">
+                    Scope: {s.outletId ? outlets.find(o => o.id === s.outletId)?.name || "Outlet" : ""}
+                    {s.outletId && s.brandId ? " · " : ""}
+                    {s.brandId ? brands.find(b => b.id === s.brandId)?.name || "Brand" : ""}
+                    {" "}— Expense Dr {fmtRp(s.amount)} ({s.coaCodes.join(", ")})
+                  </div>
+                )}
+                <ForecastGuardBanner
+                  amount={s.amount}
+                  outletId={s.outletId}
+                  brandId={s.brandId}
+                  kind="expense"
+                  period={form.entry_date?.slice(0, 7)}
+                  onChange={v => setVerdicts(prev => ({ ...prev, [key]: v }))}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
 
