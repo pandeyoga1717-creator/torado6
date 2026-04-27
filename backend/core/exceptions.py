@@ -33,7 +33,7 @@ class ForbiddenError(AuroraException):
 
 
 class ValidationError(AuroraException):
-    status_code = 422
+    status_code = 400
     code = "VALIDATION_ERROR"
 
 

@@ -105,8 +105,8 @@ export default function Comparatives() {
       {!loading && data && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KpiCard label={`Period ${data.period}`} value={fmt(data.current)} highlight />
-            <KpiCard label={`Previous ${data.previous_period}`} value={fmt(data.previous)} />
+            <KpiCard label={`Period ${data.period}`} value={fmt(data.current)} highlight testid="comp-current" />
+            <KpiCard label={`Previous ${data.previous_period}`} value={fmt(data.previous)} testid="comp-previous" />
             <DeltaCard delta={data.delta} pct={data.delta_pct} fmt={fmt} compareTo={data.compare_to} />
           </div>
 
@@ -123,9 +123,9 @@ export default function Comparatives() {
   );
 }
 
-function KpiCard({ label, value, highlight }) {
+function KpiCard({ label, value, highlight, testid }) {
   return (
-    <div className={cn("glass-card p-5", highlight && "border-2 border-primary/30")}>
+    <div className={cn("glass-card p-5", highlight && "border-2 border-primary/30")} data-testid={testid}>
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="text-2xl lg:text-3xl font-bold tabular-nums mt-2">{value}</div>
     </div>
@@ -139,7 +139,7 @@ function DeltaCard({ delta, pct, fmt, compareTo }) {
   const color = positive ? "text-emerald-700 dark:text-emerald-400"
     : negative ? "text-red-700 dark:text-red-400" : "text-muted-foreground";
   return (
-    <div className="glass-card p-5">
+    <div className="glass-card p-5" data-testid="comp-delta">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">Δ {compareTo.toUpperCase()}</div>
       <div className={cn("text-2xl lg:text-3xl font-bold tabular-nums mt-2 flex items-center gap-2", color)}>
         <Icon className="h-6 w-6" />

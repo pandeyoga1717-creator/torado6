@@ -312,3 +312,16 @@ Dokumen ini akan di-update setiap fase selesai. Setiap update wajib:
 
 ### Changelog
 - **v1.0** (Pre-development): Initial PRD created from CTO Plan + Excel Analysis + User clarifications
+- **v1.7B** (Phase 7B Complete — Jan 2026): **Advanced Reports** module landed.
+  - **What's Built:**
+    - Vendor Performance Scorecard (composite score = on-time × 0.40 + price stability × 0.25 + (100-defect) × 0.20 + lead-time × 0.15)
+    - Report Builder lite — 5 dimensions (outlet/brand/vendor/category/month) × 8 metrics (sales/transactions/cogs/gross-profit/ap-exposure/po-count/gr-count/purchase-value)
+    - Pivot Matrix (2D heat-mapped) with row/col/grand totals + CSV export
+    - MoM/YoY Comparatives with rolling 12m sparkline
+    - Saved Reports CRUD (per-user definitions)
+  - **API:** 10 new endpoints under `/api/reports/*` (catalog, vendor-scorecard×2, builder/run, pivot, comparatives, saved CRUD)
+  - **Frontend:** 4 new pages under `/finance/*` (vendor-scorecard, report-builder, pivot, comparatives)
+  - **Demo data:** `seed_phase7b_demo.py` produces 240 daily_sales + 45 PO + 38 GR + 480 JE for realistic reports
+  - **Test results (iteration_2):** Backend 18/23 → 23/23 after 422→400 ValidationError fix; frontend 4/4 pages render with proper data-testid coverage. Regression on Phase 4–7A passed.
+  - **Bug Fix:** Aurora `ValidationError` now returns HTTP **400** (was 422) — better REST semantics for business validation; FastAPI body-parse 422 unchanged.
+  - **Next (Phase 7C):** Forecasting (3-month sales/expense trend) + Real-time anomaly detection (notification when daily_sales deviates >X% from rolling avg).

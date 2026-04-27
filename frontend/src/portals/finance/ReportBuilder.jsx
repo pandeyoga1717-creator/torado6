@@ -222,7 +222,7 @@ export default function ReportBuilder() {
                 <Input value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="contoh: Sales Q1 by Outlet"
                   className="glass-input mt-1 h-9" data-testid="builder-save-name" />
               </div>
-              <Button onClick={saveReport} className="rounded-full grad-aurora text-white" data-testid="builder-save-confirm">Simpan</Button>
+              <Button onClick={saveReport} className="rounded-full grad-aurora text-white" data-testid="builder-save">Simpan</Button>
             </div>
           )}
         </div>

@@ -19,11 +19,15 @@
   - New Admin UI sub-portal: `/admin/configuration/*` (Aurora glass style + full `data-testid` coverage).
   - First consumer wired: **HR service charge calculation** defaults from `service_charge_policy` with outlet→brand→group resolution and persisted policy metadata.
 
-- 🎯 **Phase 7B — Advanced Reports — NEXT**
-  - Ship “Phase 7 lite” report builder and high-value advanced reports.
-  - Keep performance snappy and UX consistent with existing reporting pages.
+- 🎯 **Phase 7B — Advanced Reports — ✅ COMPLETED (Jan 2026)**
+  - Vendor Performance Scorecard (composite score, on-time%, price stability, defect rate, lead time)
+  - Report Builder lite (5 dimensions × 8 metrics × multi-filter + Saved Reports CRUD)
+  - Pivot Matrix (2D heat-mapped, row/col totals, CSV export)
+  - MoM/YoY Comparatives (KPI cards + 12m rolling sparkline)
+  - 10 endpoints under `/api/reports/*`, 4 frontend pages under `/finance/*`
+  - Test result: 23/23 backend + 4/4 frontend pages (iteration_2.json)
 
-**Status:** Phase 7A ✅ complete; **Phase 7B = starting now**.
+**Status:** Phase 7B ✅ complete; **Phase 7C/7D (Forecasting + Anomaly) = next**.
 
 ---
 

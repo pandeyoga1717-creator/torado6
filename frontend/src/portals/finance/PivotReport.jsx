@@ -99,7 +99,7 @@ export default function PivotReport() {
             className="glass-input mt-1 h-9" data-testid="pivot-to" />
         </div>
         <Button onClick={exportCsv} variant="outline" className="rounded-full gap-2 h-9 col-span-2 lg:col-span-1 lg:ml-auto"
-          disabled={!data} data-testid="pivot-export">
+          disabled={!data} data-testid="pivot-export-csv">
           <Download className="h-4 w-4" /> CSV
         </Button>
       </div>
@@ -137,7 +137,8 @@ export default function PivotReport() {
                     {data.cells[ri].map((v, ci) => {
                       const intensity = maxCell > 0 ? v / maxCell : 0;
                       return (
-                        <td key={ci} className="px-3 py-2 text-right tabular-nums relative">
+                        <td key={ci} className="px-3 py-2 text-right tabular-nums relative"
+                          data-testid={`pivot-cell-${ri}-${ci}`}>
                           <div className="absolute inset-0 m-0.5 rounded"
                             style={{ background: `rgba(124, 76, 196, ${0.05 + intensity * 0.35})` }} />
                           <span className="relative">{v === 0 ? "—" : fmt(v)}</span>

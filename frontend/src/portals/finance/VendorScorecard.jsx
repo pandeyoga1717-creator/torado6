@@ -122,7 +122,7 @@ export default function VendorScorecard() {
                 <span className="text-xs text-muted-foreground">{data.vendors.length} vendor</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm" data-testid="scorecard-table">
                   <thead>
                     <tr className="bg-muted/30 text-[11px] uppercase tracking-wide text-muted-foreground">
                       <th className="px-3 py-2 text-left">#</th>
@@ -201,7 +201,7 @@ export default function VendorScorecard() {
                     <Metric label="Defect Rate" value={detail.defect_rate_pct ?? "-"} suffix={detail.defect_rate_pct != null ? "%" : ""} />
                   </div>
                   {detail.po_breakdown?.length > 0 && (
-                    <div>
+                    <div data-testid="po-breakdown">
                       <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold mb-2 mt-3">
                         Recent POs ({detail.po_breakdown.length})
                       </div>
