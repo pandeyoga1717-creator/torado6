@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 class AuroraPhase6DTester:
-    def __init__(self, base_url="https://aurora-erp-dev.preview.emergentagent.com"):
+    def __init__(self, base_url="https://erp-finance-hub-8.preview.emergentagent.com"):
         self.base_url = base_url
         self.tokens = {}
         self.tests_run = 0
