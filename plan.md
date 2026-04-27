@@ -27,7 +27,15 @@
   - 10 endpoints under `/api/reports/*`, 4 frontend pages under `/finance/*`
   - Test result: 23/23 backend + 4/4 frontend pages (iteration_2.json)
 
-**Status:** Phase 7B ✅ complete; **Phase 7C/7D (Forecasting + Anomaly) = next**.
+- 🎯 **Phase 7C — 3-Month Forecasting — ✅ COMPLETED (Jan 2026)**
+  - Linear Regression + EWMA + Hybrid (50/50 blend) algorithms (pure Python)
+  - MAPE backtest accuracy with 30-day holdout
+  - Confidence band (±2σ residual)
+  - 4 endpoints under `/api/forecasting/*`, 1 frontend page under `/finance/forecasting`
+  - SVG chart with history/forecast/CI band + monthly bars + method comparison + per-outlet table
+  - Test result: 21/21 backend + frontend 100% after React key fix (iteration_3.json)
+
+**Status:** Phase 7C ✅ complete; **Phase 7D (Anomaly Detection) = next**.
 
 ---
 

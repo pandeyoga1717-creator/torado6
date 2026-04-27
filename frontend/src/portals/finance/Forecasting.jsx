@@ -459,8 +459,9 @@ function MonthlyBars({ history, forecast, color }) {
     <div className="flex items-end gap-3 h-44 overflow-x-auto pb-2">
       {all.map(r => {
         const h = (r.value / max) * 140;
+        const key = `${r.type}-${r.period}`;
         return (
-          <div key={r.period} className="flex flex-col items-center gap-1.5 min-w-[60px]" data-testid={`month-bar-${r.period}`}>
+          <div key={key} className="flex flex-col items-center gap-1.5 min-w-[60px]" data-testid={`month-bar-${key}`}>
             <div className="text-[10px] tabular-nums text-foreground font-semibold">{(r.value / 1e6).toFixed(0)}M</div>
             <div className="w-12 rounded-t-md transition-all"
               style={{

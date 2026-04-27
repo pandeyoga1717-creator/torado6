@@ -325,3 +325,10 @@ Dokumen ini akan di-update setiap fase selesai. Setiap update wajib:
   - **Test results (iteration_2):** Backend 18/23 → 23/23 after 422→400 ValidationError fix; frontend 4/4 pages render with proper data-testid coverage. Regression on Phase 4–7A passed.
   - **Bug Fix:** Aurora `ValidationError` now returns HTTP **400** (was 422) — better REST semantics for business validation; FastAPI body-parse 422 unchanged.
   - **Next (Phase 7C):** Forecasting (3-month sales/expense trend) + Real-time anomaly detection (notification when daily_sales deviates >X% from rolling avg).
+
+- **v1.7C** (Phase 7C Complete — Jan 2026): **3-Month Forecasting** module landed.
+  - **What's Built:** Linear Regression + EWMA + Hybrid (50/50 blend) forecasting algorithms (pure Python, no extra deps); MAPE backtest accuracy on 30-day holdout; ±2σ confidence band.
+  - **API:** 4 new endpoints under `/api/forecasting/*` (methods, sales, expense, dashboard).
+  - **Frontend:** New `/finance/forecasting` page — KPI cards, SVG chart with history/forecast/CI band + 'today' marker, monthly bar chart, method comparison panel, per-outlet table with growth & MAPE badges.
+  - **Test results (iteration_3):** Backend 21/21 (100%); frontend 100% after fixing one React duplicate-key warning in MonthlyBars.
+  - **Next (Phase 7D):** Real-time anomaly detection (sales deviation, vendor price/lead-time anomalies, AP/Cash spikes) → notification feed.
