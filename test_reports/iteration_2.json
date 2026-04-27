@@ -1,0 +1,87 @@
+{
+  "summary": "Phase 7B Advanced Reports tested. Backend 18/23 (78%) pytest pass; all 5 failures share one root cause: ValidationError returns HTTP 422 instead of 400 (spec violation). Frontend renders all 4 new Finance sub-pages (Report Builder, Pivot, MoM/YoY, Vendor Scorecard) correctly, login + nav + vendor detail drilldown work; some advertised data-testid attributes are missing.",
+
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/reports/builder/run, GET /api/reports/pivot",
+        "issue": "ValidationError returns HTTP 422 instead of 400. Phase 7B spec explicitly requires 400 for: empty dimensions, empty metrics, invalid dimension, invalid metric, dim_x==dim_y. Caused by core/exceptions.py mapping ValidationError to status_code=422 (FastAPI convention) -- spec wants business-domain validation to use 400. Affected tests: test_validation_empty_dimensions, test_validation_empty_metrics, test_validation_invalid_dimension, test_validation_invalid_metric, test_pivot_same_dim_returns_400. Same issue flagged in iteration_1.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "missing_testids": [
+      {"page": "/finance/report-builder", "missing": ["builder-save"], "note": "Save button is visible and clickable but lacks data-testid"},
+      {"page": "/finance/pivot", "missing": ["pivot-export-csv", "pivot-cell"], "note": "CSV button visible; matrix cells lack data-testid for E2E selection"},
+      {"page": "/finance/comparatives", "missing": ["comp-current", "comp-previous", "comp-delta"], "note": "KPI value cards present (Period 2026-04 / Previous 2026-03 / Delta -17.47%) but lack data-testid attrs to assert values in E2E"},
+      {"page": "/finance/vendor-scorecard", "missing": ["scorecard-table"], "note": "Table is rendered; rows have data-testid scorecard-row-* but the wrapping table does not. Detail panel after click lacks po-breakdown testid (header reads 'Recent POs (10)')"}
+    ]
+  },
+
+  "passed_tests_backend": [
+    "Auth guard on /api/reports/* (401 without token)",
+    "GET /api/reports/catalog with all 5 dimensions, 8 metrics, mom+yoy comparatives",
+    "GET /api/reports/vendor-scorecard?top=5 returns ranked list, sorted by total_spend desc, all required keys present",
+    "Composite score arithmetic verified (on_time*0.40 + price_stability*0.25 + (100-defect)*0.20 + lead_score*0.15) against backend output",
+    "GET /api/reports/vendor-scorecard/{vendor_id} returns po_breakdown[] with required keys",
+    "POST /api/reports/builder/run basic run — totals match row sums",
+    "GET /api/reports/pivot returns x_labels, y_labels, cells, row/col_totals, grand_total with consistent dimensions",
+    "GET /api/reports/comparatives mom returns previous_period 2026-03; yoy returns 2025-04; rolling_12m has 12 entries",
+    "POST /api/reports/saved → list → DELETE round-trip works (soft-delete confirmed by re-listing)",
+    "Regression: /api/finance/profit-loss?period=2026-04, /api/finance/trial-balance?period=2026-04, /api/finance/ap-aging, /api/finance/journals, /api/finance/periods, /api/approvals/queue, /api/hr/advances, /api/hr/payroll all return 200"
+  ],
+
+  "passed_tests_frontend": [
+    "Login admin@torado.id / Torado@2026 -> /admin",
+    "Finance sub-nav contains Report Builder, Pivot, MoM/YoY, Vendor Scorecard tabs",
+    "/finance/vendor-scorecard renders summary cards (Vendors=6, Total Spend=Rp 83.241.200, Avg On-Time 81.25%, Vendor Grade A=3) + ranked table",
+    "Click vendor row opens Detail Vendor panel with composite, on-time, lead time, price stab, defect rate + Recent POs (10) breakdown",
+    "/finance/report-builder shows Dimensi, Metrik, Filter sections, Run Report and Save buttons; Saved Reports panel visible",
+    "/finance/pivot shows metric/dim_x/dim_y controls + CSV button",
+    "/finance/comparatives shows metric+period+MoM/YoY+outlet+brand controls; KPI cards (Period -17.47% delta) + rolling 12m sparkline rendered",
+    "No JS pageerror or console errors on any of the 4 new Phase 7B pages"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_phase7b_reports.py",
+    "/app/test_reports/pytest/phase7b_results.xml"
+  ],
+
+  "action_items": [
+    "HIGH: Make business-domain ValidationError return HTTP 400 (currently 422). Likely fix in /app/backend/core/exceptions.py — set ValidationError.status_code=400. This is a contract change explicitly required by Phase 7B spec for builder/run + pivot endpoints.",
+    "MEDIUM: Add missing data-testid attributes: builder-save (ReportBuilder.jsx), pivot-export-csv + pivot-cell (PivotReport.jsx), comp-current/comp-previous/comp-delta (Comparatives.jsx), scorecard-table + po-breakdown (VendorScorecard.jsx).",
+    "LOW (carried from iteration_1): outlet@torado.id non-admin credentials still not present in /app/memory/test_credentials.md, blocking RBAC negative-permission testing for non-Super Admin personas."
+  ],
+
+  "critical_code_review_comments": [
+    "reports_service.py line 657: delta_pct can divide by zero protected (prev=0 -> None) — good.",
+    "reports_service.py: vendor_scorecard returns per-PO `received_total` summed from grs.grand_total, but composite_score uses GR-derived total_spend; correct.",
+    "reports_service.py report_builder: when 'category' dim is requested, gr_count is split fractionally (1/len(lines)) which can produce non-integer counts in the rows — acceptable for analytical view but worth documenting.",
+    "reports_service.py file is 791 lines — over 700-line guideline. Consider splitting (vendor_scorecard, builder, pivot, comparatives, saved) into separate modules.",
+    "core/exceptions.py: ValidationError currently maps to 422 — but Phase 7B spec requires 400 for domain-level validation. FastAPI's automatic 422 on Pydantic body parse can co-exist; AuroraException(ValidationError) should map to 400.",
+    "MongoDB ObjectId properly excluded via core.db.serialize — verified."
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_phase7b_reports.py (new file - 23 tests covering Phase 7B + regression)"
+  ],
+
+  "success_rate": {
+    "backend": "78% (18/23 — 5 failures all from same 422-vs-400 root cause)",
+    "frontend": "85% (all 4 pages render and core flows work; a handful of testids are missing)"
+  },
+
+  "test_credentials": "admin@torado.id / Torado@2026 (Super Admin) verified working. Non-admin outlet@torado.id still NOT working (carried from iteration_1).",
+
+  "seed_data_creation": "None created. Existing Phase 7B seed data (240 daily_sales, 45 POs, 38 GRs, 480 JEs, 6 vendors) verified present and produced sensible scorecard (Total Spend Rp 83.2M, 6 vendors, 3 grade-A).",
+
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend Phase 7B endpoints fully wired and functional; only contract-level issue is ValidationError -> 422 (should be 400 per spec). Frontend pages render with seeded data; verify newly-added testids after main agent fixes them. CSV export on /finance/pivot was not actually exercised (button present but click not validated)."
+}
