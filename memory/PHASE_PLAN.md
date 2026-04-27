@@ -530,11 +530,14 @@ Low priority / future:
 | 0 — Discovery | ✅ Complete | — | — | Plan docs created |
 | 1 — POC AI | ✅ Complete | 2026-04-26 | 2026-04-26 | All 5 tests passed; see PHASE_1_POC_RESULT.md |
 | 2 — Foundation | ✅ Complete | 2026-04-26 | 2026-04-26 | Auth+RBAC+Master+Admin Portal; see PHASE_2_RESULT.md |
-| 3 — Procurement+Inventory | ⏳ Pending | | | |
-| 4 — Finance | ⏳ Pending | | | |
-| 5 — HR | ⏳ Pending | | | |
-| 6 — Executive+AI | ⏳ Pending | | | |
-| 7 — Polish | ⏳ Pending | | | |
+| 3 — Procurement+Inventory | ✅ Complete | | | |
+| 4 — Finance | ✅ Complete (core) | | | BS/Cashflow/BankRecon/PAY pending → backlog |
+| 5 — HR | ✅ Complete (core) | | | |
+| 6 — Executive+AI | ✅ Complete (core) | | | Period locking + multi-tier approvals + /my-approvals shipped (6 + 6D) |
+| 7A — Self-Service Config | ✅ Complete | 2026-04-27 | 2026-04-27 | sales_input_schema / petty_cash_policy / service_charge_policy / incentive_policy editors + effective dating + HR svc-charge integration |
+| 7B — Advanced Reports | ⏳ Next | | | Report builder lite + pivot + comparatives |
+| 7C/7D — Forecast+Anomaly | ⏳ Pending | | | |
+| 7E — Polish | ⏳ Pending | | | |
 | 8 — Hardening | ⏳ Pending | | | |
 
 ---

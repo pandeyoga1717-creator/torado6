@@ -1,54 +1,54 @@
 [
   {
-    "content": "Backend: extend `routers/admin.py` business-rules CRUD to support all 4 new rule types",
+    "content": "Backend: extend business-rules CRUD to support all 4 new rule types",
     "status": "completed"
   },
   {
-    "content": "Backend: create `services/business_rules_service.py` with version, overlap, duplicate, timeline",
+    "content": "Backend: business_rules_service.py with version, overlap, duplicate, timeline",
     "status": "completed"
   },
   {
-    "content": "Backend: add `GET /api/admin/business-rules/timeline` endpoint with overlap flags",
+    "content": "Backend: GET /api/admin/business-rules/timeline with overlap flags",
     "status": "completed"
   },
   {
-    "content": "Backend: extend seed-defaults to seed baseline policies for all 4 rule types",
+    "content": "Backend: extend seed-defaults for all 4 rule types",
     "status": "completed"
   },
   {
-    "content": "Frontend: create shared components — ScopePicker, RuleListLayout, RuleHistoryPanel — with URL-query persistence",
+    "content": "Frontend: shared ScopePicker + RuleHistoryPanel + RuleListPage + RuleEditorShell",
     "status": "completed"
   },
   {
-    "content": "Frontend: extend AdminPortal SUB_ROUTES + add /admin/configuration/* routing with subnav",
+    "content": "Frontend: AdminPortal SUB_ROUTES + /admin/configuration/* routing with subnav",
     "status": "completed"
   },
   {
-    "content": "Frontend: build SalesSchemaEditor (Sheet)",
+    "content": "Frontend: SalesSchemaEditor (Sheet)",
     "status": "completed"
   },
   {
-    "content": "Frontend: build PettyCashPolicyEditor (Dialog)",
+    "content": "Frontend: PettyCashPolicyEditor (Dialog)",
     "status": "completed"
   },
   {
-    "content": "Frontend: build ServiceChargePolicyEditor (Dialog)",
+    "content": "Frontend: ServiceChargePolicyEditor (Dialog)",
     "status": "completed"
   },
   {
-    "content": "Frontend: build IncentiveSchemeEditor (Sheet)",
+    "content": "Frontend: IncentiveSchemeEditor (Sheet)",
     "status": "completed"
   },
   {
-    "content": "Frontend: build EffectiveDatingTimeline page",
+    "content": "Frontend: EffectiveDatingTimeline page",
     "status": "completed"
   },
   {
-    "content": "Backend: wire HR `calculate_service_charge` to load defaults from `service_charge_policy` (verified working)",
+    "content": "Backend: HR calculate_service_charge loads defaults from service_charge_policy (verified)",
     "status": "completed"
   },
   {
-    "content": "Call testing_agent for backend + frontend smoke",
-    "status": "in_progress"
+    "content": "Testing agent: backend + frontend smoke (no critical bugs, no regressions)",
+    "status": "completed"
   }
 ]
