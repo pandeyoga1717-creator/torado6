@@ -472,7 +472,7 @@ function UrgentPurchaseForm({ open, userOutlets, paymentMethods, onClose, onSave
             disabled={saving || (needsReason && !confirmReason.trim())}
             className="pill-active" data-testid="up-save"
           >
-            {saving ? "…" : (hasSevereGuard ? "Submit (with reason)" : "Submit")}
+            {saving ? "…" : (needsReason ? "Submit (with reason)" : "Submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

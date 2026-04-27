@@ -402,7 +402,7 @@ async def activity_summary(
         b["total_amount"] += amt
         if sev == "severe":
             b["severe"] += 1
-        else:
+        elif sev == "mild":
             b["mild"] += 1
         dev = abs(float(d.get("deviation_pct", 0) or 0))
         if dev > b["max_deviation_pct"]:
@@ -451,7 +451,7 @@ def _build_link(source_type: Optional[str], source_id: Optional[str]) -> Optiona
     if source_type == "journal_entry" or source_type == "manual":
         return f"/finance/journals/{source_id}"
     if source_type == "urgent_purchase":
-        return f"/outlet/urgent-purchases?id={source_id}"
+        return f"/outlet/urgent-purchase?id={source_id}"
     if source_type == "petty_cash":
         return f"/outlet/petty-cash?id={source_id}"
     return None

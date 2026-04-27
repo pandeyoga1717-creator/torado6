@@ -339,3 +339,12 @@ Dokumen ini akan di-update setiap fase selesai. Setiap update wajib:
   - **UX value:** Converts forecasts from passive analytics into proactive operational nudge — managers see "this expense is 35% above April forecast Rp 438M" before they post, with auditable reason capture.
   - **Test results (iteration_4):** Backend 11/11 (100%); frontend 100% across severe / mild / none / multi-scope flows.
   - **Next:** Extend the same `<ForecastGuardBanner>` into Petty Cash submission, Urgent Purchase form, and the My-Approvals queue (read-only verdict display for approvers).
+
+- **v1.7C++** (Forecast Guard Persistence + Executive Widget — Jan 2026):
+  - **Persistence layer:** New `forecast_guard_logs` collection + helpers `log_verdict()`, `get_verdict_for_source()`, `list_logs()`, `activity_summary()`. Idempotent: re-submitting same source updates not duplicates. Pre-check happens **before** `_post_journal` so MTD doesn't double-count in-flight amounts.
+  - **3 new endpoints:** `GET /api/forecasting/guard/source/{type}/{id}`, `/guard/logs`, `/guard/activity` (auth + perm gated to `executive.dashboard.read` or `finance.report.profit_loss`).
+  - **Wired into:** Manual Journal POST + Urgent Purchase create — both now persist verdict log with reason on submission.
+  - **Executive Dashboard widget** (`<ForecastGuardWidget>`) — auto-counts forecast-busting submissions in last 7/14/30 days. Shows: 3 summary tiles (Severe / Mild / At-Risk Rp), By-Outlet ranked list with severity pills + max deviation %, Recent transactions list with click-through links to JE/UP details, "clean state" mode when zero. Replaces gut-feel governance with data-driven oversight for the CFO/Owner.
+  - **My-Approvals enhancement:** Queue rows now show forecast-guard badge (red for severe, amber for mild) with deviation % + reason snippet, ringing the entire row in the relevant color.
+  - **Bug fix in `post_manual_journal`:** Pre-check moved BEFORE `_post_journal` (was after — caused MTD double-counting drift; verdict severity could shift from `mild` to `severe` due to in-flight amount being included in MTD). Now pre-check verdict matches exactly what user sees in the form.
+  - **Test results (iteration_5):** Backend 15/15 (100%); frontend 95% — Executive widget renders perfectly with 8 logs across 5 outlets, range toggles, Show More expand. UP dialog banner+reason gating verified. MyApprovals badge code path verified (visual not testable on demo seed since no pending approvals).
