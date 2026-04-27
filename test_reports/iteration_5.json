@@ -1,0 +1,74 @@
+{
+  "summary": "Phase 7C++ Forecast Guard persistence + Executive widget + UrgentPurchase + MyApprovals — 15/15 backend pytest pass (100%). Frontend Executive widget renders perfectly with all data-testids, summary tiles (3 severe / 5 mild / Rp 830M at risk), 5 by-outlet rows sorted desc, 4 recent links + Show More toggle expanding to 8. Urgent Purchase Dialog forecast-guard banner + reason gating works (mild +15.08% on 80M Altero, reason required, save disabled→enabled after reason). MyApprovals page renders gracefully on empty state (no pending approvals on demo data — documented expected case).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Urgent Purchase create dialog (up-save button)", "issues": ["Submit button label stays 'Submit' even when guard severity is mild/severe and reason is required. Spec called for 'Submit (with reason)'. Functional behaviour (disabled→enabled after reason fill) works correctly. Pure copy/label deviation, not a blocker."]}
+    ]
+  },
+  "passed_tests_backend": [
+    "GET /guard/logs no auth -> 401",
+    "GET /guard/activity no auth -> 401",
+    "GET /guard/logs?days=7 -> 200, items have severity/deviation_pct/source_doc_no/reason/created_at/source_type/source_id",
+    "GET /guard/logs?days=30 returns >= /guard/logs?days=7 length",
+    "GET /guard/activity?days=7 -> 200 with total/severe_count/mild_count/total_amount_at_risk/by_outlet/recent/days; total == severe+mild",
+    "by_outlet sorted by count desc; outlet_name resolved from outlets collection",
+    "/guard/activity?days=14 and ?days=30 return broader windows correctly",
+    "Recent items include 'link' deep-link: journal_entry -> /finance/journals/{id}; urgent_purchase -> /outlet/urgent-purchases?id={id}",
+    "POST /api/finance/journals/manual with forecast_guard_reason on a 250M severe-period JE -> JE created AND log persisted via GET /guard/source/journal_entry/{id} (severity in mild/severe, reason matches, source_id matches)",
+    "Idempotency: list_logs returns exactly 1 row for the persisted JE source_id (no duplication)",
+    "Pre-check happens BEFORE _post_journal — verdict severity from /guard/check matches persisted post-JE verdict (no MTD double-counting drift)",
+    "POST /api/outlet/urgent-purchases with forecast_guard_reason -> UP created with reason persisted on doc AND guard log row persisted (source_type=urgent_purchase)",
+    "REGRESSION /api/forecasting/guard/check still 200",
+    "REGRESSION /api/forecasting/dashboard 200",
+    "REGRESSION /api/finance/profit-loss 200/400/422"
+  ],
+  "passed_tests_frontend": [
+    "Login admin@torado.id/Torado@2026 -> /admin OK",
+    "/executive renders [data-testid='forecast-guard-widget']",
+    "Summary tiles: fg-widget-severe='3', fg-widget-mild='5', fg-widget-amount='Rp 830.000.000'",
+    "Range toggles fg-widget-range-7/14/30 all present and clickable; clicking 30 reloads data",
+    "By-outlet list shows 5 rows sorted desc: Altero (S1 M3 Rp 320M max +90%), Konsolidasi (S1 Rp 250M +57%), Rucker Park (S1 Rp 100M +62%), Calluna (M1 Rp 100M +15%), De La Sol (M1 Rp 60M +20%)",
+    "Recent list shows 4 clickable links with deep links to /outlet/urgent-purchases?id=... and /finance/journals/...",
+    "fg-widget-toggle-all 'Tampilkan semua (8)' expands recent to 8 items",
+    "Urgent Purchase /outlet/urgent-purchase: '+ Urgent Purchase Baru' opens dialog with up-form-outlet (Altero default), up-form-date, up-form-vendor, up-form-pm, up-line-name-0, up-line-qty-0, up-line-cost-0, up-save",
+    "Filling 80M for Altero triggers ForecastGuardBanner mild after debounce: 'ABOVE FORECAST (+15.08%) PERIOD 2026-04', shows MTD Rp 151.229.000 / Proposed Rp 80.000.000 / Projected Rp 231.229.000 / Forecast Rp 200.922.649 ±Rp 15.980.855",
+    "[data-testid='up-guard-reason'] textarea appears with label 'ALASAN / JUSTIFIKASI (WAJIB KARENA DI ATAS FORECAST)'",
+    "[data-testid='up-save'] disabled when reason empty; becomes enabled after typing reason",
+    "MyApprovals /my-approvals renders cleanly with 0 pending state ('Tidak ada approval menunggu / Semua dokumen yang membutuhkan aksi Anda sudah selesai. 🎉') — QueueRow code path does not crash on empty list"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase7c_guard_persistence.py",
+    "/app/test_reports/pytest/phase7c_persist_results.xml"
+  ],
+  "action_items": [
+    "LOW (label only): UP create dialog up-save button label should toggle to 'Submit (with reason)' when guard severity is mild/severe (currently stays 'Submit'). See /app/frontend/src/portals/outlet/UrgentPurchaseList.jsx near up-save.",
+    "INFO: queue-guard-{entity_id}-{severity} badges on /my-approvals were NOT visually verifiable because demo seed has 0 pending approvals across all entity types. Code path verified to render without crash; recommend adding a seed step that leaves at least one PR/UP pending for the admin to enable visual verification next iteration."
+  ],
+  "critical_code_review_comments": [
+    "log_verdict idempotency works correctly (verified via list_logs same source_id count == 1).",
+    "Pre-check-before-post fix verified: pre-check verdict severity matches post-persist verdict (no MTD double-count) — tested on a 75M expense round-trip.",
+    "forecast_guard_service.activity_summary: by_outlet aggregation increments b['mild'] for ANY non-severe verdict (including 'none' if log existed). Since logs are only persisted for mild/severe, this is safe today, but if log_verdict is ever changed to log 'none' verdicts, this counter would over-count. Worth a defensive `elif sev == 'mild'`.",
+    "_build_link returns /outlet/urgent-purchases?id=... but the route registered is /outlet/urgent-purchase (singular) per the live nav — clicking 'recent' link with plural may 404. Verify route alias or normalise to singular.",
+    "ForecastGuardWidget '<8' Show More logic + Tampilkan lebih sedikit toggle works smoothly. Good.",
+    "MyApprovals.jsx QueueRow guard badge code path could not be exercised due to empty queue — recommend e2e seed of a pending PR/UP to keep this from regressing."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase7c_guard_persistence.py (new — 15 tests covering /guard/logs, /guard/activity, /guard/source/{type}/{id}, JE+UP persistence, idempotency, pre-check-before-post, regression)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15)",
+    "frontend": "95% — Executive widget and UP dialog all working; only minor label deviation on up-save button. MyApprovals badge path not visually verifiable due to empty seed (page renders cleanly)."
+  },
+  "test_credentials": "admin@torado.id / Torado@2026 (Super Admin) — verified.",
+  "seed_data_creation": "Tests created 3-4 transient guard logs (1 severe JE + 1 small JE for double-count test + 1 UP at 80M). Existing seed had 4 logs from prior iteration; widget showed 8 total in 30d window after this test run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 7C++ Forecast Guard persistence + Executive widget + UP integration are E2E green. Backend 15/15 green: /guard/logs, /guard/activity, /guard/source/{type}/{id}, JE+UP persist+log, idempotency, pre-check-before-post (no double-counting), 7d/14d/30d windows, by_outlet sort+name resolution. Frontend: ForecastGuardWidget on /executive shows 3 summary tiles (severe/mild/amount), range toggles 7/14/30, sorted by_outlet up to 6, recent up to 4 with Show More. UrgentPurchaseList dialog mild banner + up-guard-reason + up-save disabled-until-reason all working. Only deviation: up-save label stays 'Submit' instead of 'Submit (with reason)' on guard active. MyApprovals queue-guard badge path not verifiable due to 0 pending approvals on demo seed.",
+  "rca_of_issue": "N/A — feature works. The minor up-save label deviation is a one-line copy fix in UrgentPurchaseList.jsx where the button label conditional on guardVerdict.severity in (mild,severe) should append ' (with reason)' to match Manual Journal Form behaviour."
+}

@@ -20,7 +20,7 @@ Algorithm:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from core.db import get_db
@@ -259,3 +259,199 @@ async def check_expense(
         "message": message,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ============================================================
+# Persistence — guard logs (audit trail + dashboard widget)
+# ============================================================
+
+async def log_verdict(
+    *,
+    verdict: dict[str, Any],
+    source_type: str,         # "journal_entry" | "urgent_purchase" | "petty_cash" | etc.
+    source_id: str,
+    source_doc_no: Optional[str] = None,
+    reason: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    """Persist a guard verdict log row IF severity is mild or severe.
+
+    Idempotent: a log already exists for (source_type, source_id) is updated, not duplicated.
+    Returns the persisted row, or None if severity was 'none' (nothing logged).
+    """
+    if not verdict or verdict.get("severity") == "none":
+        return None
+    db = get_db()
+    now = datetime.now(timezone.utc).isoformat()
+
+    payload = {
+        "source_type": source_type,
+        "source_id": source_id,
+        "source_doc_no": source_doc_no,
+        "severity": verdict.get("severity"),
+        "deviation_pct": verdict.get("deviation_pct"),
+        "amount": verdict.get("amount"),
+        "kind": verdict.get("kind"),
+        "period": verdict.get("period"),
+        "outlet_id": verdict.get("outlet_id"),
+        "brand_id": verdict.get("brand_id"),
+        "mtd_amount": verdict.get("mtd_amount"),
+        "projected": verdict.get("projected"),
+        "forecast_value": verdict.get("forecast_value"),
+        "ci_band": verdict.get("ci_band"),
+        "method": verdict.get("method"),
+        "message": verdict.get("message"),
+        "reason": (reason or "").strip() or None,
+        "updated_at": now,
+        "updated_by": user_id,
+    }
+
+    existing = await db.forecast_guard_logs.find_one({
+        "source_type": source_type, "source_id": source_id, "deleted_at": None,
+    })
+    if existing:
+        await db.forecast_guard_logs.update_one(
+            {"id": existing["id"]}, {"$set": payload},
+        )
+        merged = {**existing, **payload}
+        return {k: v for k, v in merged.items() if k != "_id"}
+
+    import uuid as _uuid
+    doc = {
+        "id": str(_uuid.uuid4()),
+        **payload,
+        "created_at": now,
+        "created_by": user_id,
+        "deleted_at": None,
+    }
+    await db.forecast_guard_logs.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+async def get_verdict_for_source(source_type: str, source_id: str) -> Optional[dict[str, Any]]:
+    """Look up a previously-logged verdict for a given entity (used in approval UI)."""
+    db = get_db()
+    d = await db.forecast_guard_logs.find_one({
+        "source_type": source_type, "source_id": source_id, "deleted_at": None,
+    })
+    if not d:
+        return None
+    return {k: v for k, v in d.items() if k != "_id"}
+
+
+async def list_logs(
+    *,
+    days: int = 7,
+    severity: Optional[str] = None,
+    outlet_id: Optional[str] = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    db = get_db()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    match: dict[str, Any] = {"deleted_at": None, "created_at": {"$gte": cutoff}}
+    if severity:
+        match["severity"] = severity
+    if outlet_id:
+        match["outlet_id"] = outlet_id
+    items = await db.forecast_guard_logs.find(match).sort([("created_at", -1)]).to_list(limit)
+    return [{k: v for k, v in d.items() if k != "_id"} for d in items]
+
+
+async def activity_summary(
+    *,
+    days: int = 7,
+) -> dict[str, Any]:
+    """Aggregate forecast-guard activity for executive dashboard widget."""
+    db = get_db()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    # Load outlet names for labels
+    outlets_map: dict[str, dict] = {}
+    async for o in db.outlets.find({"deleted_at": None}):
+        outlets_map[o["id"]] = {"name": o.get("name", o["id"]), "code": o.get("code", "")}
+
+    by_outlet: dict[str, dict[str, Any]] = {}
+    severe_count = 0
+    mild_count = 0
+    total_amount_at_risk = 0.0
+    recent: list[dict[str, Any]] = []
+
+    async for d in db.forecast_guard_logs.find(
+        {"deleted_at": None, "created_at": {"$gte": cutoff}},
+    ).sort([("created_at", -1)]):
+        sev = d.get("severity")
+        if sev == "severe":
+            severe_count += 1
+        elif sev == "mild":
+            mild_count += 1
+        amt = float(d.get("amount", 0) or 0)
+        total_amount_at_risk += amt
+        oid = d.get("outlet_id") or "_none"
+        ot_label = outlets_map.get(d.get("outlet_id") or "", {}).get("name") if oid != "_none" else "Konsolidasi"
+        ot_code = outlets_map.get(d.get("outlet_id") or "", {}).get("code") if oid != "_none" else ""
+        if oid not in by_outlet:
+            by_outlet[oid] = {
+                "outlet_id": d.get("outlet_id"),
+                "outlet_name": ot_label or "—",
+                "outlet_code": ot_code or "",
+                "count": 0, "severe": 0, "mild": 0, "total_amount": 0.0,
+                "max_deviation_pct": 0.0,
+            }
+        b = by_outlet[oid]
+        b["count"] += 1
+        b["total_amount"] += amt
+        if sev == "severe":
+            b["severe"] += 1
+        else:
+            b["mild"] += 1
+        dev = abs(float(d.get("deviation_pct", 0) or 0))
+        if dev > b["max_deviation_pct"]:
+            b["max_deviation_pct"] = dev
+
+        if len(recent) < 20:
+            recent.append({
+                "id": d.get("id"),
+                "source_type": d.get("source_type"),
+                "source_id": d.get("source_id"),
+                "source_doc_no": d.get("source_doc_no"),
+                "severity": sev,
+                "amount": amt,
+                "deviation_pct": d.get("deviation_pct"),
+                "period": d.get("period"),
+                "reason": d.get("reason"),
+                "message": d.get("message"),
+                "outlet_id": d.get("outlet_id"),
+                "outlet_name": ot_label or "—",
+                "created_at": d.get("created_at"),
+                "link": _build_link(d.get("source_type"), d.get("source_id")),
+            })
+
+    # Round totals
+    for b in by_outlet.values():
+        b["total_amount"] = round(b["total_amount"], 2)
+        b["max_deviation_pct"] = round(b["max_deviation_pct"], 2)
+
+    by_outlet_list = sorted(by_outlet.values(), key=lambda x: x["count"], reverse=True)
+
+    return {
+        "days": days,
+        "total": severe_count + mild_count,
+        "severe_count": severe_count,
+        "mild_count": mild_count,
+        "total_amount_at_risk": round(total_amount_at_risk, 2),
+        "by_outlet": by_outlet_list,
+        "recent": recent,
+    }
+
+
+def _build_link(source_type: Optional[str], source_id: Optional[str]) -> Optional[str]:
+    """Best-effort frontend deep-link for a guarded entity."""
+    if not source_type or not source_id:
+        return None
+    if source_type == "journal_entry" or source_type == "manual":
+        return f"/finance/journals/{source_id}"
+    if source_type == "urgent_purchase":
+        return f"/outlet/urgent-purchases?id={source_id}"
+    if source_type == "petty_cash":
+        return f"/outlet/petty-cash?id={source_id}"
+    return None

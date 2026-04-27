@@ -110,6 +110,7 @@ async def post_manual_journal(payload: dict, *, user: dict) -> dict:
     entry_date = payload.get("entry_date")
     description = (payload.get("description") or "").strip()
     lines = payload.get("lines", [])
+    forecast_guard_reason = (payload.get("forecast_guard_reason") or "").strip() or None
     if not entry_date:
         raise ValidationError("entry_date wajib (YYYY-MM-DD)")
     if not description:
@@ -137,7 +138,34 @@ async def post_manual_journal(payload: dict, *, user: dict) -> dict:
         })
     import uuid
     source_id = payload.get("source_id") or str(uuid.uuid4())
-    return await journal_service._post_journal(  # type: ignore[attr-defined]
+
+    # Forecast guard PRE-check (must happen before post so MTD doesn't double-count)
+    pre_check_verdicts: list[dict] = []
+    try:
+        from services import forecast_guard_service
+        scopes: dict[tuple, dict] = {}
+        for ln in enriched:
+            dr = float(ln.get("dr", 0) or 0)
+            if dr <= 0:
+                continue
+            coa = coa_map.get(ln.get("coa_id"))
+            if not coa or coa.get("type") not in ("expense", "cogs"):
+                continue
+            key = (ln.get("dim_outlet"), ln.get("dim_brand"))
+            if key not in scopes:
+                scopes[key] = {"outlet_id": ln.get("dim_outlet"),
+                               "brand_id": ln.get("dim_brand"), "amount": 0.0}
+            scopes[key]["amount"] += dr
+        for sc in scopes.values():
+            v = await forecast_guard_service.check_expense(
+                amount=sc["amount"], outlet_id=sc["outlet_id"], brand_id=sc["brand_id"],
+                kind="expense", period=entry_date[:7],
+            )
+            pre_check_verdicts.append(v)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("aurora.forecast_guard").exception("guard pre-check failed")
+
+    je = await journal_service._post_journal(  # type: ignore[attr-defined]
         entry_date=entry_date,
         description=description,
         source_type="manual",
@@ -145,6 +173,23 @@ async def post_manual_journal(payload: dict, *, user: dict) -> dict:
         lines=enriched,
         user_id=user["id"],
     )
+
+    # Persist guard logs after post (now we have je['id'])
+    try:
+        from services import forecast_guard_service
+        for v in pre_check_verdicts:
+            await forecast_guard_service.log_verdict(
+                verdict=v,
+                source_type="journal_entry",
+                source_id=je["id"],
+                source_doc_no=je.get("doc_no"),
+                reason=forecast_guard_reason,
+                user_id=user["id"],
+            )
+    except Exception:  # noqa: BLE001
+        logging.getLogger("aurora.forecast_guard").exception("guard log failed for JE")
+
+    return je
 
 
 async def reverse_journal(je_id: str, *, user: dict, reason: str) -> dict:

@@ -275,6 +275,21 @@ async def create_urgent_purchase(payload: dict, *, user: dict) -> dict:
     if not items:
         raise ValidationError("Minimal 1 item")
     total = sum(float(it.get("total", 0) or 0) for it in items)
+    forecast_guard_reason = (payload.get("forecast_guard_reason") or "").strip() or None
+
+    # Pre-check forecast guard (urgent purchase doesn't post a JE on creation, but still
+    # captures intent and prevents MTD self-counting later when admin approves)
+    pre_check_verdict = None
+    try:
+        from services import forecast_guard_service
+        pre_check_verdict = await forecast_guard_service.check_expense(
+            amount=total, outlet_id=outlet_id, kind="expense",
+            period=(payload["purchase_date"] or "")[:7] or None,
+        )
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger("aurora.forecast_guard").exception("guard pre-check failed for UP")
+
     from utils.number_series import next_doc_no
     doc_no = await next_doc_no("PR")  # sharing PR series for now
     doc = {
@@ -290,6 +305,7 @@ async def create_urgent_purchase(payload: dict, *, user: dict) -> dict:
         "paid_by": payload.get("paid_by"),
         "receipt_url": payload.get("receipt_url"),
         "notes": payload.get("notes"),
+        "forecast_guard_reason": forecast_guard_reason,
         "status": "submitted",
         "approved_by": None, "approved_at": None,
         "journal_entry_id": None,
@@ -299,6 +315,23 @@ async def create_urgent_purchase(payload: dict, *, user: dict) -> dict:
     await db.urgent_purchases.insert_one(doc)
     await audit_log(user_id=user["id"], entity_type="urgent_purchase",
                     entity_id=doc["id"], action="create")
+
+    # Persist guard log if pre-check produced a verdict
+    if pre_check_verdict is not None:
+        try:
+            from services import forecast_guard_service
+            await forecast_guard_service.log_verdict(
+                verdict=pre_check_verdict,
+                source_type="urgent_purchase",
+                source_id=doc["id"],
+                source_doc_no=doc_no,
+                reason=forecast_guard_reason,
+                user_id=user["id"],
+            )
+        except Exception:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger("aurora.forecast_guard").exception("guard log failed for UP")
+
     return serialize(doc)
 
 

@@ -10,6 +10,7 @@ import KpiCard from "@/components/shared/KpiCard";
 import AIInsightsCard from "@/components/shared/AIInsightsCard";
 import ConversationalQA from "@/components/shared/ConversationalQA";
 import SalesTrendChart from "@/components/shared/SalesTrendChart";
+import ForecastGuardWidget from "@/components/shared/ForecastGuardWidget";
 import LoadingState from "@/components/shared/LoadingState";
 import { Button } from "@/components/ui/button";
 import { fmtRp, fmtNumber } from "@/lib/format";
@@ -126,6 +127,11 @@ export default function ExecutivePortal() {
               )}
             </div>
             <AIInsightsCard />
+          </div>
+
+          {/* Forecast Guard governance widget */}
+          <div className="mb-5">
+            <ForecastGuardWidget />
           </div>
 
           <div className="glass-card p-5">

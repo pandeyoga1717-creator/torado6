@@ -15,9 +15,11 @@ import LoadingState from "@/components/shared/LoadingState";
 import ItemAutocomplete from "@/components/shared/ItemAutocomplete";
 import VendorAutocomplete from "@/components/shared/VendorAutocomplete";
 import ReceiptCapture from "@/components/shared/ReceiptCapture";
+import ForecastGuardBanner from "@/components/shared/ForecastGuardBanner";
 import { fmtRp, fmtDate, todayJakartaISO } from "@/lib/format";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 
 const STATUS_TABS = [
   { key: "",          label: "Semua" },
@@ -190,6 +192,8 @@ function Th({ children, className = "" }) {
 function UrgentPurchaseForm({ open, userOutlets, paymentMethods, onClose, onSaved }) {
   const [form, setForm] = useState(emptyUP());
   const [saving, setSaving] = useState(false);
+  const [guardVerdict, setGuardVerdict] = useState(null);
+  const [confirmReason, setConfirmReason] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -198,6 +202,8 @@ function UrgentPurchaseForm({ open, userOutlets, paymentMethods, onClose, onSave
         purchase_date: todayJakartaISO(),
         outlet_id: userOutlets[0]?.id || "",
       });
+      setGuardVerdict(null);
+      setConfirmReason("");
     }
   }, [open, userOutlets]);
 
@@ -223,10 +229,18 @@ function UrgentPurchaseForm({ open, userOutlets, paymentMethods, onClose, onSave
   }
   const total = form.items.reduce((s, l) => s + Number(l.total || 0), 0);
 
+  const hasSevereGuard = guardVerdict?.severity === "severe";
+  const hasMildGuard = guardVerdict?.severity === "mild";
+  const needsReason = hasSevereGuard || hasMildGuard;
+
   const submit = async () => {
     if (!form.outlet_id) { toast.error("Outlet wajib"); return; }
     if (form.items.length === 0) { toast.error("Tambahkan minimal 1 item"); return; }
     if (form.items.some(it => !it.name || !it.qty)) { toast.error("Lengkapi semua item"); return; }
+    if (needsReason && !confirmReason.trim()) {
+      toast.error("Pengeluaran melewati forecast — wajib isi alasan/justifikasi");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -242,6 +256,7 @@ function UrgentPurchaseForm({ open, userOutlets, paymentMethods, onClose, onSave
         paid_by: form.paid_by || null,
         receipt_url: form.receipt_url || null,
         notes: form.notes,
+        forecast_guard_reason: needsReason ? confirmReason.trim() : null,
       };
       await api.post("/outlet/urgent-purchases", payload);
       toast.success("Urgent purchase dibuat");
@@ -416,10 +431,48 @@ function UrgentPurchaseForm({ open, userOutlets, paymentMethods, onClose, onSave
             className="glass-input mt-1 min-h-[60px]" />
         </div>
 
+        {/* Forecast Guard banner — auto-checks total amount vs outlet forecast */}
+        {form.outlet_id && total > 0 && (
+          <div className="mt-3">
+            <ForecastGuardBanner
+              amount={total}
+              outletId={form.outlet_id}
+              kind="expense"
+              period={form.purchase_date?.slice(0, 7)}
+              onChange={setGuardVerdict}
+            />
+          </div>
+        )}
+
+        {needsReason && (
+          <div className={cn(
+            "mt-3 rounded-xl p-3 border-2",
+            hasSevereGuard ? "border-red-500/40" : "border-amber-500/40",
+          )}>
+            <Label className="text-xs uppercase text-muted-foreground font-semibold">
+              Alasan / Justifikasi (wajib karena {hasSevereGuard ? "jauh" : ""} di atas forecast)
+            </Label>
+            <Textarea
+              value={confirmReason}
+              onChange={e => setConfirmReason(e.target.value)}
+              placeholder="mis. Vendor langganan habis stok, terpaksa beli langsung di pasar untuk operasional malam ini, dll."
+              className="glass-input mt-1 min-h-[60px]"
+              data-testid="up-guard-reason"
+            />
+            <div className="text-[11px] text-muted-foreground mt-1.5">
+              Alasan akan disimpan sebagai bukti audit untuk approver.
+            </div>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Batal</Button>
-          <Button onClick={submit} disabled={saving} className="pill-active" data-testid="up-save">
-            {saving ? "…" : "Submit"}
+          <Button
+            onClick={submit}
+            disabled={saving || (needsReason && !confirmReason.trim())}
+            className="pill-active" data-testid="up-save"
+          >
+            {saving ? "…" : (hasSevereGuard ? "Submit (with reason)" : "Submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Inbox, RefreshCw, ShoppingCart, Package, Sliders, Wallet, ExternalLink,
-  ClipboardCheck, Sparkles,
+  ClipboardCheck, Sparkles, AlertTriangle, ShoppingBag,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import api, { unwrap } from "@/lib/api";
@@ -21,6 +21,7 @@ const TABS = [
   { key: "purchase_order",    label: "Purchase Order",   icon: ShoppingCart },
   { key: "stock_adjustment",  label: "Stock Adjustment", icon: Sliders },
   { key: "employee_advance",  label: "Employee Advance", icon: Wallet },
+  { key: "urgent_purchase",   label: "Urgent Purchase",  icon: ShoppingBag },
 ];
 
 const ENTITY_ICONS = {
@@ -28,6 +29,7 @@ const ENTITY_ICONS = {
   purchase_order:    ShoppingCart,
   stock_adjustment:  Sliders,
   employee_advance:  Wallet,
+  urgent_purchase:   ShoppingBag,
 };
 
 export default function MyApprovals() {
@@ -35,6 +37,7 @@ export default function MyApprovals() {
   const [items, setItems] = useState([]);
   const [counts, setCounts] = useState({});
   const [loading, setLoading] = useState(true);
+  const [guardLogs, setGuardLogs] = useState({});  // key: source_id -> verdict log
 
   async function load() {
     setLoading(true);
@@ -44,8 +47,18 @@ export default function MyApprovals() {
         api.get("/approvals/queue", { params: { ...params, per_page: 200 } }),
         api.get("/approvals/counts"),
       ]);
-      setItems(unwrap(q) || []);
+      const queue = unwrap(q) || [];
+      setItems(queue);
       setCounts((unwrap(c) || {}).by_entity || {});
+
+      // Best-effort: fetch latest forecast guard logs (last 30d) and index by source_id
+      try {
+        const lr = await api.get("/forecasting/guard/logs", { params: { days: 30, limit: 500 } });
+        const logs = unwrap(lr) || [];
+        const map = {};
+        logs.forEach(l => { if (l.source_id) map[l.source_id] = l; });
+        setGuardLogs(map);
+      } catch { /* user may not have perm; widget gracefully degrades */ }
     } catch {
       toast.error("Gagal memuat queue");
     } finally { setLoading(false); }
@@ -105,7 +118,10 @@ export default function MyApprovals() {
             description="Semua dokumen yang membutuhkan aksi Anda sudah selesai. 🎉" />
         ) : (
           <div className="space-y-2">
-            {items.map((it, i) => <QueueRow key={it.entity_id} item={it} index={i} />)}
+            {items.map((it, i) => (
+              <QueueRow key={it.entity_id} item={it} index={i}
+                guardLog={guardLogs[it.entity_id]} />
+            ))}
           </div>
         )
       )}
@@ -132,13 +148,19 @@ function StatTile({ label, value, accent = false, active = false, icon: Icon, on
   );
 }
 
-function QueueRow({ item, index }) {
+function QueueRow({ item, index, guardLog }) {
   const Icon = ENTITY_ICONS[item.entity_type] || Inbox;
+  const isSevere = guardLog?.severity === "severe";
+  const isMild = guardLog?.severity === "mild";
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.025, 0.4), duration: 0.18 }}
-      className="glass-card p-4">
+      className={cn(
+        "glass-card p-4",
+        isSevere && "ring-2 ring-red-500/40",
+        isMild && "ring-2 ring-amber-500/40",
+      )}>
       <Link to={item.link} className="flex items-center gap-3 group" data-testid={`queue-row-${item.entity_id}`}>
         <div className="h-10 w-10 rounded-2xl bg-aurora/10 flex items-center justify-center shrink-0">
           <Icon className="h-4 w-4 text-aurora" />
@@ -150,6 +172,21 @@ function QueueRow({ item, index }) {
             <StatusPill status={item.status} />
             {item.is_legacy && (
               <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">legacy</span>
+            )}
+            {guardLog && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-bold",
+                  isSevere
+                    ? "bg-red-500/20 text-red-700 dark:text-red-300"
+                    : "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+                )}
+                data-testid={`queue-guard-${item.entity_id}-${guardLog.severity}`}
+                title={guardLog.message}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                forecast {guardLog.severity} · +{Math.abs(guardLog.deviation_pct || 0).toFixed(0)}%
+              </span>
             )}
           </div>
           <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
@@ -165,6 +202,14 @@ function QueueRow({ item, index }) {
             </span>
             <span>·</span>
             <span>{fmtRelative(item.submitted_at || item.created_at)}</span>
+            {guardLog?.reason && (
+              <>
+                <span>·</span>
+                <span className="italic truncate max-w-[280px]" title={guardLog.reason}>
+                  reason: {guardLog.reason}
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className="text-right shrink-0">

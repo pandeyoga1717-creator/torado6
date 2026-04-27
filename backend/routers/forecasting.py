@@ -94,3 +94,35 @@ async def guard_check(
         period=payload.get("period"),
         method=payload.get("method", "hybrid"),
     ))
+
+
+@router.get("/guard/source/{source_type}/{source_id}")
+async def guard_for_source(
+    source_type: str,
+    source_id: str,
+    user: dict = Depends(current_user),
+):
+    """Look up a previously-persisted guard verdict for a given entity (e.g., on approval detail)."""
+    return ok_envelope(await forecast_guard_service.get_verdict_for_source(source_type, source_id))
+
+
+@router.get("/guard/logs")
+async def guard_logs(
+    days: int = Query(7, ge=1, le=180),
+    severity: Optional[str] = None,
+    outlet_id: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+    user: dict = Depends(require_any_perm(*_FORECAST_PERMS)),
+):
+    return ok_envelope(await forecast_guard_service.list_logs(
+        days=days, severity=severity, outlet_id=outlet_id, limit=limit,
+    ))
+
+
+@router.get("/guard/activity")
+async def guard_activity(
+    days: int = Query(7, ge=1, le=90),
+    user: dict = Depends(require_any_perm(*_FORECAST_PERMS)),
+):
+    """Aggregated forecast-guard activity for the executive dashboard widget."""
+    return ok_envelope(await forecast_guard_service.activity_summary(days=days))
