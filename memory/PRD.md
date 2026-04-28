@@ -348,3 +348,23 @@ Dokumen ini akan di-update setiap fase selesai. Setiap update wajib:
   - **My-Approvals enhancement:** Queue rows now show forecast-guard badge (red for severe, amber for mild) with deviation % + reason snippet, ringing the entire row in the relevant color.
   - **Bug fix in `post_manual_journal`:** Pre-check moved BEFORE `_post_journal` (was after — caused MTD double-counting drift; verdict severity could shift from `mild` to `severe` due to in-flight amount being included in MTD). Now pre-check verdict matches exactly what user sees in the form.
   - **Test results (iteration_5):** Backend 15/15 (100%); frontend 95% — Executive widget renders perfectly with 8 logs across 5 outlets, range toggles, Show More expand. UP dialog banner+reason gating verified. MyApprovals badge code path verified (visual not testable on demo seed since no pending approvals).
+
+- **v1.7D** (Phase 7D Complete — Jan 2026): **Real-Time Anomaly Detection** module landed.
+  - **What's Built:** 4 pure-Python detectors for real-time anomaly scanning:
+    - `sales_deviation` — z-score vs rolling 14-day outlet baseline (mild≥1.5σ / severe≥2.5σ)
+    - `vendor_price_spike` — % deviation vs vendor 90-day item-price average (mild≥15% / severe≥30%, upward only)
+    - `vendor_leadtime` — excess days vs vendor 90-day PO→GR baseline (mild≥+3d / severe≥+7d)
+    - `ap_cash_spike` — projected-monthly cash outflow vs 3-month average (mild≥15% / severe≥30%)
+  - **API:** 8 new endpoints under `/api/anomalies/*` (list, types, summary, {id}, triage, scan, thresholds/resolve)
+  - **Configurable thresholds:** New `anomaly_threshold_policy` business_rule type with outlet→brand→group scope hierarchy + effective dating; seeded default at group-scope.
+  - **Live hooks:** `outlet_service.validate_daily_sales` and `procurement_service.post_gr` fire best-effort anomaly checks (exception-safe, non-blocking) → auto-create anomaly_event + dispatch role-based notifications.
+  - **Triage workflow:** 4 actions (acknowledge / investigating / resolved / false_positive) + note field + full audit trail (who/when/note). Idempotent upsert by (type, source_type, source_id) — re-running scan updates existing events instead of duplicating.
+  - **Frontend:**
+    - `/finance/anomalies` — full feed page with summary tiles (total/severe/mild/open), 5 filters (type/severity/status/outlet/search), detail Sheet drawer with stats grid + threshold snapshot + context, triage action buttons, Run Scan button
+    - Executive Dashboard widget `<AnomalyOverviewWidget>` — severity tiles, by-type breakdown bar, top outlets list, recent 3 events with deep-link, last-scan timestamp
+    - `/admin/configuration/anomaly-thresholds` — Admin editor with 4 enable-able sections (Sales / Vendor Price / Leadtime / AP-Cash) with numeric inputs per threshold
+  - **Permissions:** 3 new perms added (`anomaly.feed.read`, `anomaly.triage`, `anomaly.scan.trigger`); read/triage/scan access granted via fallback to existing finance/executive/procurement perms.
+  - **Demo data:** `seed_phase7d_demo.py` seeds 14 anomalies (3 severe, 11 mild) across 2 types + 53 notifications.
+  - **Test results (iteration_6):** POC 7/7 (100%); backend testing_agent 29/31 (93.5%); frontend 100%. Minor fix shipped: Finance manager now permitted to trigger manual scan.
+  - **Next (Phase 7E):** Performance & Polish (mobile/dark-mode/A11y/SEO) OR backfill P0 gaps (Balance Sheet, Cashflow, Bank Recon, PAY).
+

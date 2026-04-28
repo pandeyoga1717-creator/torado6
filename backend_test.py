@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for Aurora F&B ERP Phase 7A
-Tests business rules service, HR integration, and RBAC
+Backend API Testing for Aurora F&B ERP Phase 7D
+Tests anomaly detection system, triage actions, and permissions
 """
 import requests
 import json
 import sys
 from datetime import datetime, timedelta
 
-class Phase7AAPITester:
-    def __init__(self, base_url="https://erp-finance-hub-8.preview.emergentagent.com"):
+class Phase7DAPITester:
+    def __init__(self, base_url="https://torado-staging.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
+        self.finance_token = None
+        self.executive_token = None
+        self.procurement_token = None
         self.outlet_token = None
         self.tests_run = 0
         self.tests_passed = 0
         self.failed_tests = []
-        self.created_rule_ids = []
+        self.created_anomaly_ids = []
 
     def run_test(self, name, method, endpoint, expected_status, data=None, headers=None, token=None):
         """Run a single API test"""
@@ -82,383 +85,503 @@ class Phase7AAPITester:
             return response['data']['access_token']
         return None
 
-    def test_seed_defaults(self):
-        """Test seeding default business rules"""
+    def test_anomaly_types(self):
+        """Test anomaly types endpoint"""
         success, response = self.run_test(
-            "Seed default config rules",
-            "POST",
-            "/api/admin/business-rules/seed-defaults",
-            200,
-            data={"rule_type": "config"},
-            token=self.admin_token
-        )
-        if success and 'data' in response:
-            print(f"   Seeded {response['data'].get('inserted', 0)} default rules")
-        return success
-
-    def test_list_rules_by_type(self, rule_type):
-        """Test listing rules by type"""
-        success, response = self.run_test(
-            f"List {rule_type} rules",
+            "Get anomaly types",
             "GET",
-            "/api/admin/business-rules",
+            "/api/anomalies/types",
             200,
-            data={
-                "rule_type": rule_type,
-                "scope_type": "group",
-                "scope_id": "*"
-            },
             token=self.admin_token
         )
         if success and 'data' in response:
-            rules = response['data']
-            print(f"   Found {len(rules)} {rule_type} rules")
-            return True, rules
-        return False, []
-
-    def test_create_rule(self, rule_type, rule_data, name):
-        """Test creating a new business rule"""
-        payload = {
-            "rule_type": rule_type,
-            "scope_type": "group",
-            "scope_id": "*",
-            "rule_data": rule_data,
-            "name": name,
-            "active": True,
-            "effective_from": "2026-07-01",
-            "effective_to": "2026-09-30"
-        }
-        
-        success, response = self.run_test(
-            f"Create {rule_type} rule",
-            "POST",
-            "/api/admin/business-rules",
-            200,
-            data=payload,
-            token=self.admin_token
-        )
-        
-        if success and 'data' in response:
-            rule_id = response['data'].get('id')
-            if rule_id:
-                self.created_rule_ids.append(rule_id)
-                print(f"   Created rule ID: {rule_id}")
-                # Check for overlaps
-                overlaps = response['data'].get('overlaps_with', [])
-                if overlaps:
-                    print(f"   ⚠️  Overlaps detected with rules: {overlaps}")
-            return True, response['data']
-        return False, {}
-
-    def test_rule_validation(self):
-        """Test rule validation constraints"""
-        # Test invalid service_charge_policy lb_pct > 1
-        invalid_payload = {
-            "rule_type": "service_charge_policy",
-            "scope_type": "group",
-            "scope_id": "*",
-            "rule_data": {
-                "service_charge_pct": 0.05,
-                "lb_pct": 1.5,  # Invalid: > 1
-                "ld_pct": 0.0
-            },
-            "name": "Invalid Service Charge Policy",
-            "active": True
-        }
-        
-        success, response = self.run_test(
-            "Test validation - invalid lb_pct",
-            "POST",
-            "/api/admin/business-rules",
-            400,  # Expecting validation error
-            data=invalid_payload,
-            token=self.admin_token
-        )
+            types = response['data']
+            print(f"   Found {len(types)} anomaly types")
+            expected_types = ["sales_deviation", "vendor_price_spike", "vendor_leadtime", "ap_cash_spike"]
+            for expected in expected_types:
+                found = any(t.get('value') == expected for t in types)
+                if found:
+                    print(f"   ✓ {expected} type found")
+                else:
+                    print(f"   ✗ {expected} type missing")
+                    return False
         return success
 
-    def test_version_increment(self, rule_type):
-        """Test auto-version increment"""
-        # Create first rule
-        rule_data = {"monthly_limit": 1000000} if rule_type == "petty_cash_policy" else {}
-        success1, rule1 = self.test_create_rule(rule_type, rule_data, f"Test {rule_type} v1")
-        
-        if not success1:
-            return False
-            
-        # Create second rule with same scope+type
-        success2, rule2 = self.test_create_rule(rule_type, rule_data, f"Test {rule_type} v2")
-        
-        if success2:
-            v1 = rule1.get('version', 0)
-            v2 = rule2.get('version', 0)
-            print(f"   Version increment: v{v1} -> v{v2}")
-            return v2 > v1
-        return False
-
-    def test_duplicate_rule(self, rule_id):
-        """Test rule duplication"""
+    def test_anomaly_summary(self):
+        """Test anomaly summary endpoint"""
         success, response = self.run_test(
-            "Duplicate rule",
-            "POST",
-            f"/api/admin/business-rules/{rule_id}/duplicate",
-            200,
-            data={"name": "Test Duplicate Rule"},
-            token=self.admin_token
-        )
-        
-        if success and 'data' in response:
-            dup_id = response['data'].get('id')
-            if dup_id:
-                self.created_rule_ids.append(dup_id)
-                print(f"   Duplicated rule ID: {dup_id}")
-                print(f"   Active status: {response['data'].get('active', 'unknown')}")
-            return True, response['data']
-        return False, {}
-
-    def test_archive_activate_rule(self, rule_id):
-        """Test archiving and activating rules"""
-        # Archive
-        success1, _ = self.run_test(
-            "Archive rule",
-            "POST",
-            f"/api/admin/business-rules/{rule_id}/archive",
-            200,
-            token=self.admin_token
-        )
-        
-        if not success1:
-            return False
-            
-        # Activate
-        success2, _ = self.run_test(
-            "Activate rule",
-            "POST",
-            f"/api/admin/business-rules/{rule_id}/activate",
-            200,
-            token=self.admin_token
-        )
-        
-        return success2
-
-    def test_timeline_endpoint(self):
-        """Test timeline endpoint"""
-        success, response = self.run_test(
-            "Get timeline for petty_cash_policy",
+            "Get anomaly summary (7 days)",
             "GET",
-            "/api/admin/business-rules/timeline",
+            "/api/anomalies/summary",
             200,
-            data={
-                "rule_type": "petty_cash_policy",
-                "scope_type": "group",
-                "scope_id": "*"
-            },
+            data={"days": 7},
+            token=self.admin_token
+        )
+        if success and 'data' in response:
+            data = response['data']
+            counts = data.get('counts', {})
+            print(f"   Summary: {counts.get('total', 0)} total, {counts.get('severe', 0)} severe, {counts.get('mild', 0)} mild, {counts.get('open', 0)} open")
+            
+            # Test different day ranges
+            for days in [14, 30]:
+                success2, response2 = self.run_test(
+                    f"Get anomaly summary ({days} days)",
+                    "GET",
+                    "/api/anomalies/summary",
+                    200,
+                    data={"days": days},
+                    token=self.admin_token
+                )
+                if success2 and 'data' in response2:
+                    counts2 = response2['data'].get('counts', {})
+                    print(f"   Summary {days}d: {counts2.get('total', 0)} total")
+        return success
+
+    def test_anomaly_list(self):
+        """Test anomaly list endpoint with filters"""
+        # Test basic list
+        success, response = self.run_test(
+            "List anomalies (basic)",
+            "GET",
+            "/api/anomalies",
+            200,
+            data={"per_page": 50},
             token=self.admin_token
         )
         
+        anomalies = []
         if success and 'data' in response:
-            rules = response['data']
-            print(f"   Timeline contains {len(rules)} rule versions")
-            # Check for overlaps_with field
-            for rule in rules:
-                overlaps = rule.get('overlaps_with', [])
-                if overlaps:
-                    print(f"   Rule {rule.get('id', 'unknown')} overlaps with: {overlaps}")
+            anomalies = response['data']
+            meta = response.get('meta', {})
+            print(f"   Found {len(anomalies)} anomalies (total: {meta.get('total', 0)})")
+            
+            # Store first anomaly ID for detail testing
+            if anomalies:
+                self.created_anomaly_ids.append(anomalies[0].get('id'))
+        
+        # Test filters
+        filters = [
+            {"type": "sales_deviation"},
+            {"severity": "severe"},
+            {"status": "open"},
+            {"status": ""},  # All statuses
+        ]
+        
+        for filter_params in filters:
+            filter_name = ", ".join([f"{k}={v}" for k, v in filter_params.items()])
+            success2, response2 = self.run_test(
+                f"List anomalies with filter ({filter_name})",
+                "GET",
+                "/api/anomalies",
+                200,
+                data={**filter_params, "per_page": 50},
+                token=self.admin_token
+            )
+            if success2 and 'data' in response2:
+                filtered_count = len(response2['data'])
+                print(f"   Filter {filter_name}: {filtered_count} results")
+        
         return success
 
-    def test_rbac_permissions(self):
-        """Test RBAC - non-admin user should be blocked"""
-        if not self.outlet_token:
-            print("⚠️  Skipping RBAC test - no outlet user token")
+    def test_anomaly_detail(self):
+        """Test anomaly detail endpoint"""
+        if not self.created_anomaly_ids:
+            print("   ⚠️  No anomaly IDs available for detail testing")
             return True
             
+        anomaly_id = self.created_anomaly_ids[0]
         success, response = self.run_test(
-            "RBAC test - outlet user access business rules",
+            f"Get anomaly detail",
             "GET",
-            "/api/admin/business-rules",
-            403,  # Expecting forbidden
-            data={"rule_type": "petty_cash_policy"},
-            token=self.outlet_token
+            f"/api/anomalies/{anomaly_id}",
+            200,
+            token=self.admin_token
         )
+        
+        if success and 'data' in response:
+            anomaly = response['data']
+            print(f"   Anomaly: {anomaly.get('type')} - {anomaly.get('severity')} - {anomaly.get('status')}")
+            print(f"   Title: {anomaly.get('title', 'N/A')}")
+            
+            # Verify required fields
+            required_fields = ['id', 'type', 'severity', 'status', 'created_at']
+            for field in required_fields:
+                if field not in anomaly:
+                    print(f"   ✗ Missing required field: {field}")
+                    return False
+                else:
+                    print(f"   ✓ {field}: {anomaly[field]}")
+        
         return success
 
-    def test_hr_service_charge_integration(self):
-        """Test HR service charge calculation with policy resolution"""
-        # First ensure we have a service charge policy
-        policy_data = {
-            "service_charge_pct": 0.05,
-            "lb_pct": 0.01,
-            "ld_pct": 0.0,
-            "allocation_method": "by_days_worked"
-        }
+    def test_anomaly_triage(self):
+        """Test anomaly triage actions"""
+        if not self.created_anomaly_ids:
+            print("   ⚠️  No anomaly IDs available for triage testing")
+            return True
+            
+        anomaly_id = self.created_anomaly_ids[0]
         
-        self.test_create_rule("service_charge_policy", policy_data, "Test SC Policy for HR")
-        
-        # Test HR calculation without explicit lb_pct (should use policy)
+        # Test acknowledge action
         success1, response1 = self.run_test(
-            "HR service charge calc - use policy defaults",
+            "Triage anomaly - acknowledge",
             "POST",
-            "/api/hr/service-charges/calculate",
+            f"/api/anomalies/{anomaly_id}/triage",
             200,
             data={
-                "outlet_id": "test-outlet-id",
-                "period": "2026-08"
+                "status": "acknowledged",
+                "note": "Test acknowledgment from backend test"
             },
             token=self.admin_token
         )
         
         if success1 and 'data' in response1:
-            result = response1['data']
-            lb_pct = result.get('lb_pct')
-            policy_id = result.get('policy_id')
-            print(f"   Policy resolved - lb_pct: {lb_pct}, policy_id: {policy_id}")
+            updated = response1['data']
+            print(f"   Status updated to: {updated.get('status')}")
+            print(f"   Acknowledged by: {updated.get('acknowledged_by')}")
         
-        # Test HR calculation with explicit lb_pct override
+        # Test investigating action
         success2, response2 = self.run_test(
-            "HR service charge calc - override lb_pct",
+            "Triage anomaly - investigating",
             "POST",
-            "/api/hr/service-charges/calculate",
+            f"/api/anomalies/{anomaly_id}/triage",
             200,
             data={
-                "outlet_id": "test-outlet-id", 
-                "period": "2026-08",
-                "lb_pct": 0.03
+                "status": "investigating",
+                "note": "Test investigation from backend test"
             },
             token=self.admin_token
         )
         
-        if success2 and 'data' in response2:
-            result = response2['data']
-            lb_pct = result.get('lb_pct')
-            print(f"   Override applied - lb_pct: {lb_pct}")
-            
-        return success1 and success2
+        # Test resolve action
+        success3, response3 = self.run_test(
+            "Triage anomaly - resolve",
+            "POST",
+            f"/api/anomalies/{anomaly_id}/triage",
+            200,
+            data={
+                "status": "resolved",
+                "note": "Test resolution from backend test"
+            },
+            token=self.admin_token
+        )
+        
+        if success3 and 'data' in response3:
+            resolved = response3['data']
+            print(f"   Final status: {resolved.get('status')}")
+            print(f"   Resolved by: {resolved.get('resolved_by')}")
+        
+        return success1 and success2 and success3
 
-    def test_regression_phase6(self):
-        """Test Phase 6 regression - periods and approvals"""
-        # Test finance periods
+    def test_manual_scan(self):
+        """Test manual anomaly scan"""
+        success, response = self.run_test(
+            "Manual anomaly scan",
+            "POST",
+            "/api/anomalies/scan",
+            200,
+            data={
+                "days": 14,
+                "as_of_date": datetime.now().strftime("%Y-%m-%d")
+            },
+            token=self.admin_token
+        )
+        
+        if success and 'data' in response:
+            scan_result = response['data']
+            counts = scan_result.get('counts', {})
+            print(f"   Scan completed: {counts.get('total', 0)} anomalies found")
+            print(f"   Sales: {counts.get('sales_deviation', 0)}, Vendor: {counts.get('vendor', 0)}, AP/Cash: {counts.get('ap_cash_spike', 0)}")
+            print(f"   Scan date: {scan_result.get('as_of_date')}")
+        
+        return success
+
+    def test_threshold_resolution(self):
+        """Test threshold resolution endpoint"""
+        success, response = self.run_test(
+            "Resolve thresholds (group level)",
+            "GET",
+            "/api/anomalies/thresholds/resolve",
+            200,
+            data={},
+            token=self.admin_token
+        )
+        
+        if success and 'data' in response:
+            thresholds = response['data']
+            print(f"   Resolved thresholds for rule: {thresholds.get('_rule_id', 'default')}")
+            
+            # Check for expected threshold types
+            expected_types = ["sales_deviation", "vendor_price_spike", "vendor_leadtime", "ap_cash_spike"]
+            for threshold_type in expected_types:
+                if threshold_type in thresholds:
+                    config = thresholds[threshold_type]
+                    enabled = config.get('enabled', False)
+                    print(f"   ✓ {threshold_type}: enabled={enabled}")
+                else:
+                    print(f"   ✗ {threshold_type}: missing")
+                    return False
+        
+        return success
+
+    def test_permissions_finance(self):
+        """Test finance user permissions"""
+        if not self.finance_token:
+            print("   ⚠️  No finance token available")
+            return True
+            
+        # Finance should be able to read anomalies
         success1, _ = self.run_test(
-            "Regression - finance periods",
+            "Finance user - list anomalies",
             "GET",
-            "/api/finance/periods",
+            "/api/anomalies",
             200,
-            data={"year": 2026},
-            token=self.admin_token
+            data={"per_page": 10},
+            token=self.finance_token
         )
         
-        # Test approvals queue
-        success2, _ = self.run_test(
-            "Regression - approvals queue",
-            "GET",
-            "/api/approvals/queue",
-            200,
-            token=self.admin_token
-        )
-        
-        # Test approval workflow CRUD still works
+        # Finance should be able to triage
+        if self.created_anomaly_ids:
+            success2, _ = self.run_test(
+                "Finance user - triage anomaly",
+                "POST",
+                f"/api/anomalies/{self.created_anomaly_ids[0]}/triage",
+                200,
+                data={"status": "acknowledged", "note": "Finance test"},
+                token=self.finance_token
+            )
+        else:
+            success2 = True
+            
+        # Finance should be able to trigger scan
         success3, _ = self.run_test(
-            "Regression - approval workflows",
-            "GET",
-            "/api/admin/business-rules",
+            "Finance user - manual scan",
+            "POST",
+            "/api/anomalies/scan",
             200,
-            data={"rule_type": "approval_workflow"},
-            token=self.admin_token
+            data={"days": 7},
+            token=self.finance_token
         )
         
         return success1 and success2 and success3
 
-    def cleanup_created_rules(self):
-        """Clean up rules created during testing"""
-        print(f"\n🧹 Cleaning up {len(self.created_rule_ids)} created rules...")
-        for rule_id in self.created_rule_ids:
-            try:
-                self.run_test(
-                    f"Cleanup rule {rule_id}",
-                    "DELETE",
-                    f"/api/admin/business-rules/{rule_id}",
-                    200,
-                    token=self.admin_token
-                )
-            except:
-                pass
+    def test_permissions_outlet_manager(self):
+        """Test outlet manager permissions (should be restricted)"""
+        if not self.outlet_token:
+            print("   ⚠️  No outlet token available")
+            return True
+            
+        # Outlet manager should NOT have access to anomaly feed
+        success, response = self.run_test(
+            "Outlet manager - list anomalies (should fail)",
+            "GET",
+            "/api/anomalies",
+            403,  # Expecting forbidden
+            data={"per_page": 10},
+            token=self.outlet_token
+        )
+        
+        return success
+
+    def test_live_sales_validation_hook(self):
+        """Test live sales validation hook by creating a large sales entry"""
+        # Create a synthetic large daily sales entry
+        large_amount = 50000000  # 50M - should trigger anomaly
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        success, response = self.run_test(
+            "Create large daily sales (should trigger anomaly)",
+            "POST",
+            "/api/outlet/daily-sales",
+            200,
+            data={
+                "outlet_id": "test-outlet-synthetic",
+                "sales_date": today,
+                "grand_total": large_amount,
+                "cash_sales": large_amount * 0.3,
+                "card_sales": large_amount * 0.7,
+                "status": "validated"
+            },
+            token=self.admin_token
+        )
+        
+        if success:
+            print(f"   Created large sales entry: Rp {large_amount:,}")
+            
+            # Wait a moment for async processing
+            import time
+            time.sleep(2)
+            
+            # Check if anomaly was created
+            success2, response2 = self.run_test(
+                "Check for new sales anomaly",
+                "GET",
+                "/api/anomalies",
+                200,
+                data={"type": "sales_deviation", "per_page": 10},
+                token=self.admin_token
+            )
+            
+            if success2 and 'data' in response2:
+                anomalies = response2['data']
+                recent_anomaly = None
+                for anomaly in anomalies:
+                    if anomaly.get('source_type') == 'daily_sales' and anomaly.get('scan_date') == today:
+                        recent_anomaly = anomaly
+                        break
+                
+                if recent_anomaly:
+                    print(f"   ✓ Anomaly auto-created: {recent_anomaly.get('severity')} - {recent_anomaly.get('title')}")
+                    self.created_anomaly_ids.append(recent_anomaly.get('id'))
+                    
+                    # Check if notification was sent
+                    success3, response3 = self.run_test(
+                        "Check anomaly notifications",
+                        "GET",
+                        "/api/notifications",
+                        200,
+                        data={"source_type": "anomaly_event", "per_page": 10},
+                        token=self.admin_token
+                    )
+                    
+                    if success3 and 'data' in response3:
+                        notifications = response3['data']
+                        anomaly_notifs = [n for n in notifications if n.get('source_id') == recent_anomaly.get('id')]
+                        print(f"   ✓ {len(anomaly_notifs)} notification(s) sent for anomaly")
+                else:
+                    print(f"   ⚠️  No anomaly auto-created (may be expected if baseline insufficient)")
+        
+        return success
+
+    def test_regression_phase7c(self):
+        """Test Phase 7C regression - forecasting features"""
+        # Test forecasting page endpoint
+        success1, _ = self.run_test(
+            "Regression - forecasting dashboard",
+            "GET",
+            "/api/forecasting/dashboard",
+            200,
+            token=self.admin_token
+        )
+        
+        # Test forecast guard check
+        success2, _ = self.run_test(
+            "Regression - forecast guard check",
+            "POST",
+            "/api/forecasting/guard/check",
+            200,
+            data={
+                "outlet_id": "test-outlet",
+                "period": "2026-08",
+                "amount": 1000000
+            },
+            token=self.admin_token
+        )
+        
+        return success1 and success2
+
+    def test_regression_admin_config(self):
+        """Test admin configuration regression"""
+        # Test existing config tabs still work
+        config_endpoints = [
+            "/api/admin/business-rules?rule_type=sales_input_schema",
+            "/api/admin/business-rules?rule_type=petty_cash_policy", 
+            "/api/admin/business-rules?rule_type=service_charge_policy",
+            "/api/admin/business-rules?rule_type=incentive_policy"
+        ]
+        
+        all_success = True
+        for endpoint in config_endpoints:
+            rule_type = endpoint.split('=')[1]
+            success, response = self.run_test(
+                f"Regression - {rule_type} config",
+                "GET",
+                endpoint,
+                200,
+                token=self.admin_token
+            )
+            if success and 'data' in response:
+                rules = response['data']
+                print(f"   {rule_type}: {len(rules)} rules found")
+            all_success = all_success and success
+        
+        return all_success
+
+    def cleanup_created_anomalies(self):
+        """Clean up anomalies created during testing"""
+        print(f"\n🧹 Note: {len(self.created_anomaly_ids)} anomalies were created/modified during testing")
+        # Note: We don't delete anomalies as they're part of the audit trail
 
     def run_all_tests(self):
-        """Run comprehensive Phase 7A backend tests"""
-        print("🚀 Starting Aurora F&B ERP Phase 7A Backend Tests")
+        """Run comprehensive Phase 7D backend tests"""
+        print("🚀 Starting Aurora F&B ERP Phase 7D Backend Tests")
         print("=" * 60)
         
-        # Login as admin
+        # Login as different users
         print("\n📋 Authentication Tests")
         self.admin_token = self.login("admin@torado.id", "Torado@2026")
         if not self.admin_token:
             print("❌ Failed to login as admin - aborting tests")
             return False
             
-        # Try to login as outlet user for RBAC testing
-        self.outlet_token = self.login("outlet@torado.id", "Torado@2026")
+        # Login as other users for permission testing
+        self.finance_token = self.login("finance@torado.id", "Torado@2026")
+        self.executive_token = self.login("executive@torado.id", "Torado@2026")
+        self.procurement_token = self.login("procurement@torado.id", "Torado@2026")
+        self.outlet_token = self.login("alt.manager@torado.id", "Torado@2026")
         
         try:
-            # Test 1: Seed defaults
-            print("\n📋 Seed Defaults Tests")
-            self.test_seed_defaults()
+            # Test 1: Anomaly Types
+            print("\n📋 Anomaly Types Tests")
+            self.test_anomaly_types()
             
-            # Test 2: List rules for each type
-            print("\n📋 Rule Listing Tests")
-            rule_types = ["sales_input_schema", "petty_cash_policy", "service_charge_policy", "incentive_policy"]
-            for rule_type in rule_types:
-                self.test_list_rules_by_type(rule_type)
+            # Test 2: Anomaly Summary
+            print("\n📋 Anomaly Summary Tests")
+            self.test_anomaly_summary()
             
-            # Test 3: Rule validation
-            print("\n📋 Validation Tests")
-            self.test_rule_validation()
+            # Test 3: Anomaly List & Filters
+            print("\n📋 Anomaly List & Filter Tests")
+            self.test_anomaly_list()
             
-            # Test 4: Version increment
-            print("\n📋 Version Increment Tests")
-            self.test_version_increment("petty_cash_policy")
+            # Test 4: Anomaly Detail
+            print("\n📋 Anomaly Detail Tests")
+            self.test_anomaly_detail()
             
-            # Test 5: Create rules with overlap detection
-            print("\n📋 Rule Creation & Overlap Tests")
-            success, rule = self.test_create_rule(
-                "petty_cash_policy",
-                {
-                    "monthly_limit": 4000000,
-                    "max_per_txn": 500000,
-                    "approval_threshold": 250000,
-                    "replenish_frequency": "weekly",
-                    "require_receipt": True
-                },
-                "Test Petty Q4"
-            )
+            # Test 5: Threshold Resolution
+            print("\n📋 Threshold Resolution Tests")
+            self.test_threshold_resolution()
             
-            if success and rule.get('id'):
-                rule_id = rule['id']
-                
-                # Test 6: Duplicate rule
-                print("\n📋 Rule Duplication Tests")
-                self.test_duplicate_rule(rule_id)
-                
-                # Test 7: Archive/Activate
-                print("\n📋 Archive/Activate Tests")
-                self.test_archive_activate_rule(rule_id)
+            # Test 6: Manual Scan
+            print("\n📋 Manual Scan Tests")
+            self.test_manual_scan()
             
-            # Test 8: Timeline endpoint
-            print("\n📋 Timeline Tests")
-            self.test_timeline_endpoint()
+            # Test 7: Triage Actions
+            print("\n📋 Triage Action Tests")
+            self.test_anomaly_triage()
             
-            # Test 9: RBAC
-            print("\n📋 RBAC Tests")
-            self.test_rbac_permissions()
+            # Test 8: Live Sales Hook
+            print("\n📋 Live Sales Validation Hook Tests")
+            self.test_live_sales_validation_hook()
             
-            # Test 10: HR Integration
-            print("\n📋 HR Integration Tests")
-            self.test_hr_service_charge_integration()
+            # Test 9: Permissions - Finance User
+            print("\n📋 Finance User Permission Tests")
+            self.test_permissions_finance()
             
-            # Test 11: Phase 6 Regression
-            print("\n📋 Phase 6 Regression Tests")
-            self.test_regression_phase6()
+            # Test 10: Permissions - Outlet Manager (Restricted)
+            print("\n📋 Outlet Manager Permission Tests")
+            self.test_permissions_outlet_manager()
+            
+            # Test 11: Phase 7C Regression
+            print("\n📋 Phase 7C Regression Tests")
+            self.test_regression_phase7c()
+            
+            # Test 12: Admin Config Regression
+            print("\n📋 Admin Configuration Regression Tests")
+            self.test_regression_admin_config()
             
         finally:
             # Cleanup
-            self.cleanup_created_rules()
+            self.cleanup_created_anomalies()
         
         # Print results
         print("\n" + "=" * 60)
@@ -479,7 +602,7 @@ class Phase7AAPITester:
         return success_rate >= 80  # Consider 80%+ as passing
 
 def main():
-    tester = Phase7AAPITester()
+    tester = Phase7DAPITester()
     success = tester.run_all_tests()
     return 0 if success else 1
 

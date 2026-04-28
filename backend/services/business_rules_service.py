@@ -44,6 +44,7 @@ SUPPORTED_RULE_TYPES: list[str] = [
     "petty_cash_policy",
     "service_charge_policy",
     "incentive_policy",
+    "anomaly_threshold_policy",
 ]
 
 # Rule types managed by THIS service (excludes approval_workflow which has its own service)
@@ -52,6 +53,7 @@ RULE_TYPE_LABELS: dict[str, str] = {
     "petty_cash_policy": "Kebijakan Kas Kecil",
     "service_charge_policy": "Service Charge",
     "incentive_policy": "Skema Insentif",
+    "anomaly_threshold_policy": "Threshold Deteksi Anomali",
 }
 
 VALID_SCOPE_TYPES: tuple[str, ...] = ("group", "brand", "outlet")
@@ -188,6 +190,41 @@ def _validate_rule_data(rule_type: str, rule_data: dict) -> None:
                 if not isinstance(t, dict):
                     raise ValidationError(
                         f"tiers[{i}] harus object", field=f"rule_data.tiers[{i}]"
+                    )
+
+    elif rule_type == "anomaly_threshold_policy":
+        # Each sub-detector is optional but if present must be well-formed.
+        # Allowed keys: sales_deviation, vendor_price_spike, vendor_leadtime, ap_cash_spike.
+        valid_keys = {"sales_deviation", "vendor_price_spike", "vendor_leadtime", "ap_cash_spike"}
+        for k, v in rule_data.items():
+            if k not in valid_keys:
+                # Tolerate unknown keys (forward compatibility) but warn in logs.
+                logger.warning("Unknown anomaly_threshold_policy key: %s", k)
+                continue
+            if not isinstance(v, dict):
+                raise ValidationError(
+                    f"{k} harus berupa object", field=f"rule_data.{k}"
+                )
+            # Numeric guards (negative/huge rejected)
+            for nf in ("sigma_mild", "sigma_severe", "pct_mild", "pct_severe",
+                       "days_mild", "days_severe", "window_days", "min_points",
+                       "rolling_window_days"):
+                val = v.get(nf)
+                if val is None:
+                    continue
+                try:
+                    num = float(val)
+                except (TypeError, ValueError):
+                    raise ValidationError(
+                        f"{k}.{nf} harus angka", field=f"rule_data.{k}.{nf}"
+                    )
+                if num < 0:
+                    raise ValidationError(
+                        f"{k}.{nf} tidak boleh negatif", field=f"rule_data.{k}.{nf}"
+                    )
+                if nf.startswith("window") and num > 365:
+                    raise ValidationError(
+                        f"{k}.{nf} maksimal 365", field=f"rule_data.{k}.{nf}"
                     )
 
 
@@ -678,6 +715,36 @@ DEFAULT_RULES: dict[str, dict] = {
                 "exclude_probation": True,
             },
             "tiers": [],
+        },
+    },
+    "anomaly_threshold_policy": {
+        "name": "Threshold Deteksi Anomali Standar",
+        "description": "Default thresholds untuk deteksi anomali real-time (sales, vendor, AP/cash).",
+        "rule_data": {
+            "sales_deviation": {
+                "enabled": True,
+                "sigma_mild": 1.5,
+                "sigma_severe": 2.5,
+                "window_days": 14,
+                "min_points": 7,
+            },
+            "vendor_price_spike": {
+                "enabled": True,
+                "pct_mild": 15,
+                "pct_severe": 30,
+                "window_days": 90,
+            },
+            "vendor_leadtime": {
+                "enabled": True,
+                "days_mild": 3,
+                "days_severe": 7,
+                "window_days": 90,
+            },
+            "ap_cash_spike": {
+                "enabled": True,
+                "pct_mild": 15,
+                "pct_severe": 30,
+            },
         },
     },
 }

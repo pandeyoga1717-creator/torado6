@@ -1,54 +1,58 @@
 [
   {
-    "content": "Backend: extend business-rules CRUD to support all 4 new rule types",
+    "content": "Phase 1: POC - Write backend test script validating anomaly detectors + storage + notifications (isolation)",
     "status": "completed"
   },
   {
-    "content": "Backend: business_rules_service.py with version, overlap, duplicate, timeline",
+    "content": "Phase 1: POC - Fix until all detectors + persistence + notification dispatch pass",
     "status": "completed"
   },
   {
-    "content": "Backend: GET /api/admin/business-rules/timeline with overlap flags",
+    "content": "Phase 2: Backend - Add `anomaly_threshold_policy` rule type + seed defaults in business_rules_service",
     "status": "completed"
   },
   {
-    "content": "Backend: extend seed-defaults for all 4 rule types",
+    "content": "Phase 2: Backend - Create services/anomaly_service.py with detectors + storage + scan orchestration",
     "status": "completed"
   },
   {
-    "content": "Frontend: shared ScopePicker + RuleHistoryPanel + RuleListPage + RuleEditorShell",
+    "content": "Phase 2: Backend - Create routers/anomalies.py + register + add perms to catalog",
     "status": "completed"
   },
   {
-    "content": "Frontend: AdminPortal SUB_ROUTES + /admin/configuration/* routing with subnav",
+    "content": "Phase 2: Backend - Wire live hooks in outlet_service.validate_sales + procurement_service.post_gr",
     "status": "completed"
   },
   {
-    "content": "Frontend: SalesSchemaEditor (Sheet)",
+    "content": "Phase 2: Backend - Create seed/seed_phase7d_demo.py + inject anomalous fixtures",
     "status": "completed"
   },
   {
-    "content": "Frontend: PettyCashPolicyEditor (Dialog)",
+    "content": "Phase 2: Frontend - Create Anomaly Feed page (/finance/anomalies) + detail drawer + triage",
     "status": "completed"
   },
   {
-    "content": "Frontend: ServiceChargePolicyEditor (Dialog)",
+    "content": "Phase 2: Frontend - Create Executive Anomaly Overview Widget + wire to Executive Home",
     "status": "completed"
   },
   {
-    "content": "Frontend: IncentiveSchemeEditor (Sheet)",
+    "content": "Phase 2: Frontend - Create Admin Anomaly Thresholds editor (/admin/configuration/anomaly-thresholds)",
     "status": "completed"
   },
   {
-    "content": "Frontend: EffectiveDatingTimeline page",
+    "content": "Phase 2: Frontend - Add sub-nav tabs and routes in FinancePortal + AdminPortal",
     "status": "completed"
   },
   {
-    "content": "Backend: HR calculate_service_charge loads defaults from service_charge_policy (verified)",
+    "content": "Phase 2: All user stories (US-7D-1..6) covered in Development",
     "status": "completed"
   },
   {
-    "content": "Testing agent: backend + frontend smoke (no critical bugs, no regressions)",
+    "content": "Phase 2: End-to-End Testing using testing_agent_v3 + fix all issues",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Update plan.md + PRD.md changelog + create PHASE_7D_RESULT.md",
     "status": "completed"
   }
 ]

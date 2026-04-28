@@ -114,6 +114,11 @@ PERMISSIONS_CATALOG: list[dict] = [
     {"code": "ai.forecast.read", "category": "AI", "label": "Forecast read"},
     {"code": "ai.anomaly.read", "category": "AI", "label": "Anomaly read"},
 
+    # Anomaly (Phase 7D)
+    {"code": "anomaly.feed.read", "category": "Anomaly", "label": "Read anomaly feed"},
+    {"code": "anomaly.triage", "category": "Anomaly", "label": "Triage anomaly (ack/resolve/fp)"},
+    {"code": "anomaly.scan.trigger", "category": "Anomaly", "label": "Trigger manual anomaly scan"},
+
     # Search
     {"code": "search.global.use", "category": "Search", "label": "Global search"},
 ]

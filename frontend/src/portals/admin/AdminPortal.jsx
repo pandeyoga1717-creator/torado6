@@ -19,6 +19,7 @@ import SalesSchemasPage from "./configuration/SalesSchemasPage";
 import PettyCashPoliciesPage from "./configuration/PettyCashPoliciesPage";
 import ServiceChargePoliciesPage from "./configuration/ServiceChargePoliciesPage";
 import IncentiveSchemesPage from "./configuration/IncentiveSchemesPage";
+import AnomalyThresholdsPage from "./configuration/AnomalyThresholdsPage";
 import EffectiveDatingTimelinePage from "./configuration/EffectiveDatingTimelinePage";
 
 const SUB_ROUTES = [
@@ -64,6 +65,7 @@ export default function AdminPortal() {
           <Route path="petty-cash-policies" element={<PettyCashPoliciesPage />} />
           <Route path="service-charge-policies" element={<ServiceChargePoliciesPage />} />
           <Route path="incentive-schemes" element={<IncentiveSchemesPage />} />
+          <Route path="anomaly-thresholds" element={<AnomalyThresholdsPage />} />
           <Route path="effective-dating" element={<EffectiveDatingTimelinePage />} />
         </Route>
         <Route path="workflows" element={<ApprovalWorkflows />} />

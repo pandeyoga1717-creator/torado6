@@ -6,6 +6,7 @@ export const RULE_LABELS = {
   petty_cash_policy: "Kebijakan Kas Kecil",
   service_charge_policy: "Service Charge",
   incentive_policy: "Skema Insentif",
+  anomaly_threshold_policy: "Threshold Deteksi Anomali",
 };
 
 export function ruleStatus(rule) {

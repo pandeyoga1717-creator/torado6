@@ -3,7 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import {
   Banknote, LayoutDashboard, ClipboardCheck, BookOpenCheck,
   PenSquare, Scale, FileBarChart, Receipt, Wallet, CalendarRange,
-  Hammer, Grid3x3, GitCompare, Award, LineChart,
+  Hammer, Grid3x3, GitCompare, Award, LineChart, Shield,
 } from "lucide-react";
 
 import PortalSubNav from "@/components/shared/PortalSubNav";
@@ -24,6 +24,7 @@ import PivotReport from "./PivotReport";
 import Comparatives from "./Comparatives";
 import VendorScorecard from "./VendorScorecard";
 import Forecasting from "./Forecasting";
+import AnomalyFeed from "./AnomalyFeed";
 
 const SUB_ROUTES = [
   { path: "",                label: "Overview",         icon: LayoutDashboard, exact: true },
@@ -37,6 +38,7 @@ const SUB_ROUTES = [
   { path: "pivot",           label: "Pivot",            icon: Grid3x3 },
   { path: "comparatives",    label: "MoM / YoY",        icon: GitCompare },
   { path: "forecasting",     label: "Forecasting",      icon: LineChart },
+  { path: "anomalies",       label: "Anomalies",        icon: Shield },
   { path: "vendor-scorecard",label: "Vendor Scorecard", icon: Award },
   { path: "periods",         label: "Periods",          icon: CalendarRange, prefix: true },
   { path: "coa",             label: "Chart of Accounts",icon: Wallet },
@@ -75,6 +77,7 @@ export default function FinancePortal() {
         <Route path="pivot" element={<PivotReport />} />
         <Route path="comparatives" element={<Comparatives />} />
         <Route path="forecasting" element={<Forecasting />} />
+        <Route path="anomalies" element={<AnomalyFeed />} />
         <Route path="vendor-scorecard" element={<VendorScorecard />} />
         <Route path="periods" element={<PeriodList />} />
         <Route path="period-closing/:period" element={<PeriodClosingWizard />} />

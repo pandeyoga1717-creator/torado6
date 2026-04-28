@@ -405,4 +405,11 @@ async def post_gr(payload: dict, *, user: dict) -> dict:
     await audit_log(user_id=user["id"], entity_type="goods_receipt",
                     entity_id=gr_id, action="post")
     fresh = await db.goods_receipts.find_one({"id": gr_id})
+    # Phase 7D — Real-time vendor anomaly check (best-effort)
+    try:
+        from services import anomaly_service
+        await anomaly_service.check_gr_live(serialize(fresh), user_id=user["id"])
+    except Exception as e:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger("aurora.procurement").warning("vendor anomaly check failed: %s", e)
     return serialize(fresh)

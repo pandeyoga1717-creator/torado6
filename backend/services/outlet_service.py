@@ -128,6 +128,15 @@ async def validate_daily_sales(id_: str, *, user: dict) -> dict:
                  "journal_entry_id": je["id"], "updated_at": _now()}},
     )
     await audit_log(user_id=user["id"], entity_type="daily_sales", entity_id=id_, action="validate")
+    # Phase 7D — Real-time sales anomaly check (best-effort, non-blocking)
+    try:
+        from services import anomaly_service
+        fresh = await db.daily_sales.find_one({"id": id_, "deleted_at": None})
+        if fresh:
+            await anomaly_service.check_sales_live(fresh, user_id=user["id"])
+    except Exception as e:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger("aurora.outlet").warning("sales anomaly check failed: %s", e)
     return await get_daily_sales(id_)
 
 

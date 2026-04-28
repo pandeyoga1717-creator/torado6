@@ -2,7 +2,7 @@
  * Provides its own pill subnav and shared scope picker. Renders the right child page.
  */
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { ShoppingBag, Wallet, Sparkles, Award, CalendarDays, Settings2 } from "lucide-react";
+import { ShoppingBag, Wallet, Sparkles, Award, CalendarDays, Settings2, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import ScopePicker from "@/components/shared/ScopePicker";
@@ -12,6 +12,7 @@ const SUB = [
   { path: "petty-cash-policies",  label: "Kas Kecil",         icon: Wallet,      hint: "Limit & threshold approval" },
   { path: "service-charge-policies", label: "Service Charge", icon: Sparkles,    hint: "Formula % + alokasi" },
   { path: "incentive-schemes",    label: "Insentif",          icon: Award,       hint: "Target & rumus tier" },
+  { path: "anomaly-thresholds",   label: "Anomaly Thresholds",icon: Shield,      hint: "Threshold deteksi anomali" },
   { path: "effective-dating",     label: "Versi & Jadwal",    icon: CalendarDays, hint: "Timeline efektif & bentrok" },
 ];
 
